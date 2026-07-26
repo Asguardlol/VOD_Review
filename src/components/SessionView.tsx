@@ -13,7 +13,9 @@ import {
   URL_LENGTH_WARN_THRESHOLD,
 } from '../core/share'
 import { createWclClient, parseReportCode } from '../wcl/config'
-import { parseChannelLogin, resolveChannelVod, TwitchAuthError } from '../twitch/helix'
+import { parseChannelLogin } from '../twitch/helix'
+import { TwitchAuthError } from '../twitch/client'
+import { createTwitchClient } from '../twitch/config'
 import {
   beginTwitchLogin,
   getStoredToken,
@@ -45,6 +47,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   const { session, loading, update } = useSession(store, sessionId)
   const { engine, state } = useTimeline()
   const wclClient = useMemo(() => createWclClient(), [])
+  const twitchClient = useMemo(() => createTwitchClient(), [])
 
   const [watching, setWatching] = useState<string[]>([])
   const [reportInput, setReportInput] = useState('')
@@ -85,11 +88,16 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
    */
   const resolveStreams = useCallback(
     async (streams: VodStream[], rangeStart: number, rangeEnd: number) => {
+      if (!twitchClient) return streams
       const results = await Promise.all(
         streams.map(async (stream) => {
           if (stream.source.kind !== 'twitch-channel') return stream
           try {
-            const found = await resolveChannelVod(stream.source.login, rangeStart, rangeEnd)
+            const found = await twitchClient.resolveChannelVod(
+              stream.source.login,
+              rangeStart,
+              rangeEnd,
+            )
             return found.ok
               ? { ...stream, resolved: found.vod, unavailableReason: undefined }
               : { ...stream, resolved: undefined, unavailableReason: found.reason }
@@ -101,7 +109,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
       )
       return results
     },
-    [],
+    [twitchClient],
   )
 
   if (loading) return <p className="pad">Loading…</p>
