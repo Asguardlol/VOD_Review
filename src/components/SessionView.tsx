@@ -441,19 +441,19 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
                     void loadReport(value)
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  // Enter loads whatever is there, using the lenient parse. It
+                  // is the escape hatch for what auto-detect declines to fire
+                  // on by itself: hand-typed codes, and WCL's older short ones.
+                  e.preventDefault()
+                  lastLoadedRef.current = confidentReportCode(reportInput)
+                  void loadReport(reportInput)
+                }}
                 placeholder="WarcraftLogs Report URL"
                 aria-label="Report URL"
               />
               {busy && <span className="dim">Loading report…</span>}
-              {/*
-                Kept for the cases auto-detect deliberately won't fire on: an
-                older short report code, or a code typed by hand.
-              */}
-              {!busy && reportInput.trim() && !confidentReportCode(reportInput) && (
-                <button type="submit" disabled={!wclClient}>
-                  Load report
-                </button>
-              )}
             </form>
           )}
 
