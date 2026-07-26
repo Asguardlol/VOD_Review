@@ -13,6 +13,7 @@ interface Props {
   isStalled: boolean
   onMakeAudio(): void
   onSyncHere(): void
+  onNudgeOffset(deltaMs: number): void
   onRename(): void
   onRemove(): void
   onUnavailable(reason: NonNullable<VodPov['unavailableReason']>): void
@@ -32,6 +33,7 @@ export function PovTile({
   isStalled,
   onMakeAudio,
   onSyncHere,
+  onNudgeOffset,
   onRename,
   onRemove,
   onUnavailable,
@@ -112,13 +114,58 @@ export function PovTile({
           {pov.label || 'Unnamed POV'}
         </span>
 
-        <span className="pov-offset" title="Timeline zero falls at this point in the video">
-          {formatPrecise(pov.offsetMs)}
+        {/*
+          Nudging this POV's offset is how alignment actually gets fixed. Every
+          POV is locked to the shared timeline, so there is no way to scrub one
+          on its own — instead you watch, see this angle running early or late,
+          and pull it back by that much. Negative delta moves the video earlier.
+        */}
+        <span className="pov-sync">
+          <button
+            className="nudge"
+            title="This POV is running late — pull it 1s earlier"
+            onClick={() => onNudgeOffset(-1000)}
+            disabled={!!error}
+          >
+            −1s
+          </button>
+          <button
+            className="nudge"
+            title="Fine: 0.1s earlier"
+            onClick={() => onNudgeOffset(-100)}
+            disabled={!!error}
+          >
+            −
+          </button>
+          <span className="pov-offset" title="Timeline zero falls at this point in the video">
+            {formatPrecise(pov.offsetMs)}
+          </span>
+          <button
+            className="nudge"
+            title="Fine: 0.1s later"
+            onClick={() => onNudgeOffset(100)}
+            disabled={!!error}
+          >
+            +
+          </button>
+          <button
+            className="nudge"
+            title="This POV is running early — push it 1s later"
+            onClick={() => onNudgeOffset(1000)}
+            disabled={!!error}
+          >
+            +1s
+          </button>
         </span>
 
         <MenuButton
           actions={[
-            { label: 'Sync here', onSelect: onSyncHere, disabled: !!error },
+            {
+              label: 'Sync here',
+              onSelect: onSyncHere,
+              disabled: !!error,
+            },
+            { label: 'Reset offset to 0', onSelect: () => onNudgeOffset(-pov.offsetMs) },
             { label: 'Rename…', onSelect: onRename },
             {
               label: 'Remove POV',

@@ -71,7 +71,25 @@ export class TimelineEngine {
 
   constructor(onChange: () => void) {
     this.#onChange = onChange
-    this.#tick = window.setInterval(() => this.#onTick(), TICK_MS)
+  }
+
+  /**
+   * Starts the correction tick. Idempotent.
+   *
+   * Deliberately not done in the constructor: the engine outlives individual
+   * effect runs, and React StrictMode mounts, cleans up, and mounts again in
+   * development. A ticker started in the constructor and cleared by that first
+   * cleanup would never come back, leaving an engine that accepts commands but
+   * never advances — which looks exactly like broken playback.
+   */
+  start(): void {
+    this.#tick ??= window.setInterval(() => this.#onTick(), TICK_MS)
+  }
+
+  /** Stops the tick. The engine stays usable and `start` can resume it. */
+  stop(): void {
+    if (this.#tick !== undefined) window.clearInterval(this.#tick)
+    this.#tick = undefined
   }
 
   get state(): TimelineState {
@@ -196,11 +214,6 @@ export class TimelineEngine {
     return Math.max(0, max)
   }
 
-  destroy(): void {
-    if (this.#tick !== undefined) window.clearInterval(this.#tick)
-    this.#tick = undefined
-    this.#players.clear()
-  }
 
   // -------------------------------------------------------------------------
 

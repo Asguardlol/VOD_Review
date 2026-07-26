@@ -30,9 +30,13 @@ export function useTimeline(): {
     })
   }
 
+  // Only the ticker is tied to the effect lifecycle. Players unregister
+  // themselves from their own tiles, and the engine survives a StrictMode
+  // remount so a resumed tick picks up exactly where it left off.
   useEffect(() => {
     const engine = engineRef.current
-    return () => engine?.destroy()
+    engine?.start()
+    return () => engine?.stop()
   }, [])
 
   return { engine: engineRef.current, state }

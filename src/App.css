@@ -569,10 +569,26 @@ select {
   text-overflow: ellipsis;
 }
 
+.pov-sync {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.nudge {
+  padding: 2px 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  min-width: 22px;
+}
+
 .pov-offset {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--text-dim);
+  min-width: 52px;
+  text-align: center;
 }
 
 .pov-video {

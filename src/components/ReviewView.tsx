@@ -58,6 +58,13 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
     })
   }, [review])
 
+  // The engine has no memory across a page load, so a reopened review has to
+  // tell it which POV is audible — otherwise every player stays muted and the
+  // reference clock is whichever one happened to register first.
+  useEffect(() => {
+    if (review?.audioPovId) engine.setAudioPov(review.audioPovId)
+  }, [engine, review?.audioPovId])
+
   const watchedPovs = useMemo(
     () =>
       watching
@@ -135,6 +142,15 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
     mutate((r) => ({
       ...r,
       povs: r.povs.map((p) => (p.id === povId ? { ...p, offsetMs } : p)),
+    }))
+  }
+
+  const nudgeOffset = (povId: string, deltaMs: number) => {
+    mutate((r) => ({
+      ...r,
+      povs: r.povs.map((p) =>
+        p.id === povId ? { ...p, offsetMs: p.offsetMs + deltaMs } : p,
+      ),
     }))
   }
 
@@ -321,6 +337,7 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
                   isStalled={state.stalledPovIds.includes(pov.id)}
                   onMakeAudio={() => setAudio(pov.id)}
                   onSyncHere={() => syncHere(pov.id)}
+                  onNudgeOffset={(delta) => nudgeOffset(pov.id, delta)}
                   onRename={() => renamePov(pov)}
                   onRemove={() => removePov(pov.id)}
                   onUnavailable={(reason) => markUnavailable(pov.id, reason)}
