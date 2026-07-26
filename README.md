@@ -96,10 +96,15 @@ added later as another implementation rather than a rewrite.
 
 ```sh
 npm install
-npm run dev      # dev server
+npm run dev      # dev server on http://localhost:5199/
 npm run build    # tsc -b && vite build
 npm run lint     # oxlint
 ```
+
+The dev port is pinned to **5199** with `--strictPort`, and deliberately so: both
+OAuth apps register `http://localhost:5199/` as a redirect URL, and providers
+match those byte-for-byte. Letting Vite fall back to another port when 5199 is
+busy would silently break sign-in, so it fails loudly instead.
 
 Deploys to GitHub Pages via Actions on push to `main`. `vite.config.ts` sets
 `base` to the repo path; override with `VITE_BASE=/` for a custom domain.
