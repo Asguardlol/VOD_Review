@@ -118,6 +118,47 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
     [twitchClient],
   )
 
+  /**
+   * Re-resolve streams when the pieces needed to do so arrive late.
+   *
+   * Resolution needs both a report (for its time range) and a Twitch
+   * connection, and they can arrive in either order — connecting Twitch after
+   * loading a report, or adding streams before connecting. Without this those
+   * streams stay greyed with disabled checkboxes, and the only way to recover
+   * is reloading the report, which nobody would guess.
+   *
+   * Keyed on the report plus the pending stream ids so a lookup that
+   * legitimately finds nothing — someone who genuinely did not stream — settles
+   * instead of retrying forever.
+   */
+  const resolveKeyRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const report = session?.report
+    if (!report || !twitchConnected || !twitchClient) return
+
+    const pending = session.streams.filter(
+      (s) => s.source.kind === 'twitch-channel' && !s.resolved && !s.unavailableReason,
+    )
+    if (pending.length === 0) return
+
+    const key = `${report.code}:${pending.map((s) => s.id).join(',')}`
+    if (resolveKeyRef.current === key) return
+    resolveKeyRef.current = key
+
+    void (async () => {
+      try {
+        const resolved = await resolveStreams(pending, report.startTime, report.endTime)
+        const byId = new Map(resolved.map((s) => [s.id, s]))
+        update((s) => ({ ...s, streams: s.streams.map((x) => byId.get(x.id) ?? x) }))
+      } catch (caught) {
+        if (caught instanceof TwitchAuthError) {
+          setTwitchConnected(false)
+          setError(caught.message)
+        }
+      }
+    })()
+  }, [session, twitchConnected, twitchClient, resolveStreams, update])
+
   if (loading) return <p className="pad">Loading…</p>
   if (!session) {
     return (
