@@ -16,6 +16,29 @@ export function formatTime(ms: number): string {
   return negative ? `-${body}` : body
 }
 
+/** Wall-clock time of a pull, e.g. "10:23 PM". */
+export function formatClock(unixMs: number): string {
+  return new Date(unixMs).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * How old a report is, coarsely. Precision past "days" is not useful here — the
+ * question is only whether the cached fight list is worth refreshing.
+ */
+export function formatAge(unixMs: number): string {
+  const seconds = Math.max(0, (Date.now() - unixMs) / 1000)
+  if (seconds < 90) return 'just now'
+  const minutes = seconds / 60
+  if (minutes < 60) return `${Math.round(minutes)} minutes ago`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.round(hours)} hour${Math.round(hours) === 1 ? '' : 's'} ago`
+  const days = Math.round(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
 /** Precise form for the sync readout, where a tenth of a second matters. */
 export function formatPrecise(ms: number): string {
   const sign = ms < 0 ? '-' : ''

@@ -1,4 +1,4 @@
-import type { VodPov } from '../core/types'
+import type { StreamUnavailableReason } from '../core/types'
 
 /**
  * The single surface the timeline drives.
@@ -40,21 +40,23 @@ export interface PovPlayer {
   destroy(): void
 }
 
-/** Why a video will not play. Mirrors `VodPov['unavailableReason']`. */
-export class PlayerError extends Error {
-  readonly reason: NonNullable<VodPov['unavailableReason']>
+/** Why a video will not play. A subset of `StreamUnavailableReason`. */
+export type PlayerFailure = Exclude<
+  StreamUnavailableReason,
+  'no-vod-in-range' | 'channel-not-found'
+>
 
-  constructor(reason: NonNullable<VodPov['unavailableReason']>, message: string) {
+export class PlayerError extends Error {
+  readonly reason: PlayerFailure
+
+  constructor(reason: PlayerFailure, message: string) {
     super(message)
     this.name = 'PlayerError'
     this.reason = reason
   }
 }
 
-export const UNAVAILABLE_MESSAGES: Record<
-  NonNullable<VodPov['unavailableReason']>,
-  string
-> = {
+export const UNAVAILABLE_MESSAGES: Record<PlayerFailure, string> = {
   'embed-disabled':
     'The uploader disabled embedding for this video, so it cannot play here. ' +
     'It has to be re-uploaded with embedding allowed, or watched on the site directly.',

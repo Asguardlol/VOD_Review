@@ -13,6 +13,7 @@
   --accent: #4a9eff;
   --danger: #ff6b6b;
   --warn: #ffb84a;
+  --kill: #4ade80;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -276,10 +277,16 @@ select {
 
 /* ---- Body split: selector on the side, players in the main area ---- */
 
+/* The sidebar has to fit two pull tiles side by side, which sets its width. */
 .review-body {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   align-items: start;
+}
+
+.pov-sidebar {
+  max-height: calc(100vh - 52px);
+  overflow-y: auto;
 }
 
 .review-main {
@@ -375,6 +382,237 @@ select {
   font-size: 12px;
 }
 
+/* ---- Stream list ---- */
+
+.stream-panel {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.stream-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 0;
+}
+
+.stream-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 12px;
+}
+
+.stream-list li.watching {
+  background: rgb(74 158 255 / 10%);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Someone who didn't stream that night, or whose VOD has expired. Dimmed
+   rather than hidden — "they weren't recording" is information. */
+.stream-list li.unusable .sidebar-pov-name,
+.stream-list li.unusable .role-icon {
+  opacity: 0.4;
+}
+
+.role-icon {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.stream-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08121e;
+  font-weight: 600;
+}
+
+.stream-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.stream-form label {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stream-form input,
+.stream-form select {
+  min-width: 0;
+  width: 100%;
+}
+
+.offset-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.offset-field input {
+  width: 90px;
+}
+
+.form-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* ---- Pull browser ---- */
+
+.pull-browser {
+  padding-bottom: 24px;
+}
+
+.report-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.report-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-meta strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-meta .dim {
+  font-size: 11px;
+}
+
+.encounter-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.chevron {
+  color: var(--text-dim);
+}
+
+.pull-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 0 8px 8px;
+}
+
+.pull-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 7px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.pull-tile.selected {
+  border-color: var(--accent);
+  background: rgb(74 158 255 / 12%);
+}
+
+.pull-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pull-number {
+  font-weight: 700;
+}
+
+.pull-number.kill {
+  color: var(--kill);
+}
+
+.pull-number.close {
+  color: var(--warn);
+}
+
+.pull-number.wipe {
+  color: var(--danger);
+}
+
+.pull-duration {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.pull-clock {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* How far the pull got. The thing you actually scan for. */
+.pull-bar {
+  display: block;
+  height: 3px;
+  background: rgb(255 255 255 / 8%);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pull-bar-fill {
+  display: block;
+  height: 100%;
+}
+
+.pull-bar-fill.kill {
+  background: var(--kill);
+}
+
+.pull-bar-fill.close {
+  background: var(--warn);
+}
+
+.pull-bar-fill.wipe {
+  background: var(--danger);
+}
+
 /* ---- Warcraft Logs panel ---- */
 
 .log-panel {
@@ -418,20 +656,21 @@ select {
 .token-form,
 .report-form {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
 }
 
-.token-form p {
-  flex-basis: 100%;
+.token-form p,
+.report-form label {
+  margin: 0;
+  font-size: 12px;
 }
 
 .token-form input,
 .report-form input {
-  flex: 1;
-  min-width: 240px;
+  width: 100%;
 }
 
 .link-button {

@@ -33,6 +33,8 @@ export interface WclReport {
   title: string
   /** Unix ms. WCL event times are offsets from this. */
   startTime: number
+  /** Unix ms the report ends. With `startTime`, the range to find VODs for. */
+  endTime: number
   fights: VodFight[]
 }
 

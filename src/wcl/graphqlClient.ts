@@ -13,6 +13,7 @@ query Fights($code: String!) {
     report(code: $code) {
       title
       startTime
+      endTime
       fights(killType: Encounters) {
         id
         name
@@ -165,7 +166,12 @@ export class WclGraphQlClient implements WclClient {
   async listFights(reportCode: string): Promise<WclReport> {
     const data = await this.#query<{
       reportData: {
-        report: { title: string; startTime: number; fights: RawFight[] } | null
+        report: {
+          title: string
+          startTime: number
+          endTime: number
+          fights: RawFight[]
+        } | null
       }
     }>(FIGHTS_QUERY, { code: reportCode })
 
@@ -196,6 +202,9 @@ export class WclGraphQlClient implements WclClient {
         durationMs: raw.endTime - raw.startTime,
         startTime: raw.startTime,
         endTime: raw.endTime,
+        // Absolute wall-clock. This is what matches a pull to a stream's VOD,
+        // and what the pull tiles show as "10:23 PM".
+        startedAt: report.startTime + raw.startTime,
       }
     })
 
@@ -203,6 +212,7 @@ export class WclGraphQlClient implements WclClient {
       code: reportCode,
       title: report.title,
       startTime: report.startTime,
+      endTime: report.endTime,
       fights,
     }
   }

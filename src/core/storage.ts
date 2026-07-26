@@ -1,54 +1,54 @@
-import type { VodReview } from './types'
+import type { VodSession } from './types'
 
 /**
  * Everything the UI needs from persistence.
  *
  * Phase 0 is backed entirely by IndexedDB, which is all GitHub Pages can do on
- * its own — static hosting has no server to talk to. Phase 1 could add an
- * implementation backed by a small API (Cloudflare Workers + D1) for real share
- * links and cross-device history. Because the UI only ever sees this interface,
- * adding that backend is a new class, not a rewrite.
+ * its own — static hosting has no server to talk to. Because the UI only ever
+ * sees this interface, adding a backend later is a new class, not a rewrite.
  *
  * `capabilities` lets the UI hide what the active backend cannot do, instead of
  * offering a button that fails.
  */
-export interface ReviewStore {
+export interface SessionStore {
   readonly capabilities: StoreCapabilities
 
-  listReviews(): Promise<ReviewSummary[]>
-  getReview(id: string): Promise<VodReview | undefined>
-  createReview(title: string): Promise<VodReview>
+  listSessions(): Promise<SessionSummary[]>
+  getSession(id: string): Promise<VodSession | undefined>
+  /** There is no "name it first" step — a session starts empty and fills in. */
+  createSession(): Promise<VodSession>
   /**
    * Autosave. Overwrites in place.
    *
-   * Dragging the sync handle fires this constantly, so it must stay cheap and
+   * Nudging a broadcast delay fires this repeatedly, so it must stay cheap and
    * must not accumulate history entries.
    */
-  saveReview(review: VodReview): Promise<void>
-  deleteReview(id: string): Promise<void>
+  saveSession(session: VodSession): Promise<void>
+  deleteSession(id: string): Promise<void>
 
   /**
-   * Publishes a review and returns a URL to hand out. Only meaningful when
+   * Publishes a session and returns a URL. Only meaningful when
    * `capabilities.remoteSharing` is true; the local store throws instead.
    *
-   * Local-only sharing does not go through here — it encodes the whole review
-   * into the URL fragment (see `share.ts`), which needs no backend.
+   * Local-only sharing does not go through here — it encodes the session into
+   * the URL fragment (see `share.ts`), which needs no backend.
    */
-  share?(reviewId: string): Promise<string>
+  share?(sessionId: string): Promise<string>
 }
 
 export interface StoreCapabilities {
-  /** Server-side reviews reachable from any device via a short link. */
+  /** Server-side sessions reachable from any device via a short link. */
   remoteSharing: boolean
-  /** Multiple people annotating the same review concurrently. */
+  /** Multiple people annotating the same session concurrently. */
   liveCollaboration: boolean
 }
 
-export interface ReviewSummary {
+export interface SessionSummary {
   id: string
   publicId?: string
   title: string
-  povCount: number
+  streamCount: number
+  reportCode?: string
   updatedAt: number
 }
 

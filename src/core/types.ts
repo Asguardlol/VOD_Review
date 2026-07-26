@@ -1,9 +1,23 @@
 /**
  * Core data model for multi-POV VOD review.
  *
- * A review is a set of recordings of the same pull, each with an offset onto one
- * shared timeline. Seeking the timeline to `t` means seeking POV `p` to
- * `t + p.offsetMs`.
+ * ## The model, and why it looks like this
+ *
+ * A **session** is one raid night: a Warcraft Logs report plus the people who
+ * streamed it. Each stream is the *whole night's* VOD, not a clip per pull.
+ * Selecting a pull seeks every stream into its own night VOD at the matching
+ * wall-clock moment.
+ *
+ * That is what makes `offsetMs` mean **broadcast delay** — how far a streamer's
+ * video lags real time — rather than "where timeline zero falls". You set it
+ * once per person per night and every pull in the report then lines up, instead
+ * of re-syncing for each pull.
+ *
+ * Two clocks are in play and it matters which is which:
+ *   - **absolute** (unix ms): when things actually happened. Log timestamps and
+ *     VOD start times live here, and it is how a pull is matched to a VOD.
+ *   - **pull-relative** (ms from pull start): what the transport shows and what
+ *     death markers are placed on.
  *
  * This file is intentionally self-contained — see CLAUDE.md. The raid planner is
  * a separate project and must not be imported from.
@@ -11,70 +25,83 @@
 
 export type VodPlatform = 'youtube' | 'twitch'
 
+// ---------------------------------------------------------------------------
+// Streams
+// ---------------------------------------------------------------------------
+
 /**
- * One player's point of view within a review.
+ * Where a stream's video comes from.
+ *
+ * A discriminated union rather than a Twitch login string, because the two
+ * cases genuinely differ in what the app can do:
+ *
+ * - `twitch-channel` — the app resolves which VOD covers the report's time
+ *   range. Type a name once and every pull works. Needs the Twitch API.
+ * - `video` — an explicit video. The only option for YouTube, which has no
+ *   equivalent lookup, and the fallback when a Twitch VOD can't be resolved.
+ *   Without a known `startedAt` the app cannot place it on the absolute clock,
+ *   so pull selection can't auto-seek it and the offset is set by hand.
  */
-export interface VodPov {
+export type StreamSource =
+  | { kind: 'twitch-channel'; login: string }
+  | {
+      kind: 'video'
+      platform: VodPlatform
+      videoId: string
+      /** Unix ms the recording started, if known. Required for auto-seek. */
+      startedAt?: number
+    }
+
+/** Raid role, used for the sidebar icon. Mirrors how raidplan labels them. */
+export type StreamRole = 'tank' | 'healer' | 'mdps' | 'rdps'
+
+/**
+ * One person's stream for the night.
+ */
+export interface VodStream {
   id: string
-  platform: VodPlatform
-  /**
-   * YouTube video id, or Twitch VOD/highlight id.
-   *
-   * Twitch *clips* are deliberately not supported: they use a separate embed
-   * (`clips.twitch.tv/embed`) with no `seek()` or `getCurrentTime()`, so a clip
-   * cannot be driven from a shared timeline at all. Only the Twitch Player API
-   * (`video:` ids — VODs and highlights) can participate here.
-   */
-  videoId: string
-  /** Whose POV. Free text so a POV can be added before any roster exists. */
+  source: StreamSource
+  /** Display name in the sidebar. Free text — not tied to a roster. */
   label: string
-  /** Optional link to a roster member, when one is known. */
-  rosterMemberId?: string
+  role?: StreamRole
+  /** Drives the icon colour. */
+  wowClass?: WowClass
   /**
-   * How far into this video the shared timeline's zero point falls.
+   * Broadcast delay in milliseconds: how far this stream's video lags the real
+   * events in the log. Twitch's default is around 4 seconds, which is why that
+   * is the starting value rather than zero.
    *
-   * Set by the "sync here" control. Neither platform seeks frame-accurately
-   * (expect ~±0.3s), so treat this as the target for continuous drift
-   * correction, not a value you set once and trust.
+   * Neither platform seeks frame-accurately (~±0.3s), so this is the target for
+   * continuous drift correction, not a value set once and trusted.
    */
   offsetMs: number
-  /** Grouping key so large reviews stay browsable. */
-  vodGuildId?: string
   /**
-   * Set when the platform refuses to embed this video, so the UI can explain
-   * rather than showing a black box.
+   * The VOD found to cover the current report, cached from the last lookup.
    *
-   * `vod-expired` is the common one on Twitch and it is not a bug: plain VODs
-   * are deleted after ~14 days (~60 for Partners/Turbo). Only *highlights* are
-   * permanent, so a review more than a couple of weeks old will rot unless the
-   * raider saved their VOD as a highlight first.
+   * Cache, never the source of truth: it is recomputed whenever the report
+   * changes, and its absence is what greys a stream out.
    */
-  unavailableReason?:
-    | 'embed-disabled'
-    | 'age-restricted'
-    | 'not-found'
-    | 'vod-expired'
+  resolved?: ResolvedVod
+  /** Why this stream has no usable video, so the UI can say rather than hide. */
+  unavailableReason?: StreamUnavailableReason
 }
 
-/**
- * A team/guild grouping for POVs.
- *
- * The reason this exists: raidplan.io caps at four POVs with no organization. A
- * 20-person raid produces more angles than that, and grouping is what keeps a
- * large review navigable.
- */
-export interface VodGuild {
-  id: string
-  name: string
-  color?: string
-}
+export type StreamUnavailableReason =
+  | 'no-vod-in-range'
+  | 'embed-disabled'
+  | 'age-restricted'
+  | 'not-found'
+  | 'vod-expired'
+  | 'channel-not-found'
 
-/** A bookmarked moment on the shared timeline. */
-export interface VodMarker {
-  id: string
-  atMs: number
-  label: string
-  note?: string
+/** A concrete video known to cover part of the report's time range. */
+export interface ResolvedVod {
+  platform: VodPlatform
+  videoId: string
+  /** Unix ms the recording started. The anchor for all absolute-time maths. */
+  startedAt: number
+  durationMs: number
+  title?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -82,92 +109,118 @@ export interface VodMarker {
 // ---------------------------------------------------------------------------
 
 /**
- * The pull a review is about, pulled from a Warcraft Logs report.
+ * One pull from a report.
  *
- * Attaching one changes what timeline zero means: it becomes **pull start**
- * rather than an arbitrary point the user picked. That is what lets log event
- * times (deaths especially) be placed on the same timeline as the videos, and it
- * bounds the scrub bar by the fight rather than by the longest VOD.
- *
- * Optional throughout the app — a review with no log still works, it just has no
- * death lines and an unbounded timeline.
+ * Carries both clocks on purpose: `startTime`/`endTime` are report-relative (as
+ * WCL returns them, and what further queries need), while `startedAt` is
+ * absolute and is what matches a pull to a VOD.
  */
 export interface VodFight {
-  /** Report code from the WCL URL, e.g. `aBcDeF123`. */
   reportCode: string
   /** Fight id within that report. Unique per report, not globally. */
   fightId: number
   encounterId: number
   encounterName: string
-  /** Which attempt this was, as WCL numbers them. */
+  /** Which attempt this was, as WCL numbers them per encounter. */
   pullNumber?: number
   /** WCL difficulty id (3 normal, 4 heroic, 5 mythic for raids). */
   difficulty?: number
   difficultyName?: string
   kill?: boolean
-  /** Best percentage reached, for a wipe. */
-  bossPercentage?: number
-  /** Fight length. This is what the scrub bar spans. */
-  durationMs: number
   /**
-   * Report-relative start/end in ms, exactly as WCL reports them. Kept so
-   * further queries against the same report can be re-scoped without refetching
-   * the fight list.
+   * Boss health remaining at wipe, as a percentage. Drives the progress bar on
+   * a pull tile — the single most useful thing to see when scanning attempts.
    */
+  bossPercentage?: number
+  durationMs: number
+  /** Report-relative ms, exactly as WCL reports them. */
   startTime: number
   endTime: number
+  /** Unix ms. Derived from the report's start; used to locate a pull in a VOD. */
+  startedAt: number
 }
 
 /**
- * One death during the pull.
- *
- * `atMs` is relative to pull start, which is timeline zero whenever a fight is
- * attached — so a death renders on the scrub bar with no further conversion.
+ * One death during a pull. `atMs` is relative to pull start.
  */
 export interface VodDeath {
   id: string
   atMs: number
   playerName: string
   wowClass?: WowClass
-  /** The ability that killed them, when the log records one. */
   killingBlow?: string
-  /** WCL actor id, so a death can be matched to a POV's raider later. */
   sourceActorId?: number
 }
 
-export interface VodReview {
+/** A notable timed event drawn as its own marker layer on the transport. */
+export interface VodEvent {
+  id: string
+  atMs: number
+  kind: 'lust'
+  label: string
+}
+
+/**
+ * An attached report, with its fight list cached.
+ *
+ * `fetchedAt` exists so the UI can show how stale the data is and offer a
+ * refresh, the way raidplan does — a report from an in-progress raid night
+ * gains pulls while you are looking at it.
+ */
+export interface SessionReport {
+  code: string
+  title: string
+  /** Unix ms. WCL's report start; all fight times are offsets from it. */
+  startTime: number
+  endTime: number
+  fights: VodFight[]
+  fetchedAt: number
+}
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+
+/**
+ * One raid night's review.
+ *
+ * There is no "create a session" step in the UI — you land on a working surface
+ * and it fills in as you paste a report and add streams. This exists so that
+ * state can be persisted and shared, not as something the user names first.
+ */
+export interface VodSession {
   id: string
   /** Appears in share URLs. Distinct from `id` so local and shared ids differ. */
   publicId?: string
+  /** Derived from the report when there is one; editable. */
   title: string
-  guilds: VodGuild[]
-  povs: VodPov[]
+  report?: SessionReport
+  streams: VodStream[]
+  /** Which pull is loaded. Fight ids are per-report, so this pairs with report. */
+  selectedFightId?: number
+  /** Deaths for the selected pull only, refetched on selection. */
+  deaths: VodDeath[]
+  /** Other marker layers (currently Lust) for the selected pull. */
+  events: VodEvent[]
+  /** Which stream is audible. Everything else plays muted. */
+  audioStreamId?: string
+  /** User-placed bookmarks on the selected pull. */
   markers: VodMarker[]
   /**
-   * Which POV is audible. Everything else plays muted.
-   *
-   * N simultaneous audio streams is unusable, and browsers only exempt *muted*
-   * media from the autoplay gesture requirement — so muting the rest is what
-   * makes starting many players at once work at all.
-   */
-  audioPovId?: string
-  /**
-   * The pull this review covers, when one has been attached from Warcraft Logs.
-   *
-   * When set, timeline zero is pull start and the scrub bar spans the fight.
-   * When absent everything still works — the timeline is just bounded by the
-   * longest VOD instead, and there are no death lines.
-   */
-  fight?: VodFight
-  /** Deaths during the pull, from the log. Empty when no log is attached. */
-  deaths: VodDeath[]
-  /**
-   * Optional link back to a raid plan this review is about — a URL or id only.
-   * This is the seam between the two projects; do not couple them in code.
+   * Optional link back to a raid plan — a URL or id only. This is the seam
+   * between the two projects; do not couple them in code.
    */
   planUrl?: string
   createdAt: number
   updatedAt: number
+}
+
+/** A bookmarked moment, relative to the selected pull's start. */
+export interface VodMarker {
+  id: string
+  atMs: number
+  label: string
+  note?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +245,7 @@ export type WowClass =
 export type RaidRole = 'tank' | 'healer' | 'melee' | 'ranged'
 
 /**
- * A raider, for labeling POVs.
+ * A raider, for labeling streams.
  *
  * Only `name` is required. Everything else is optional so names can be typed in
  * fast and enriched later without a migration — the user asked for this

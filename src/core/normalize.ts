@@ -1,20 +1,21 @@
-import type { VodReview } from './types'
+import type { VodSession } from './types'
 
 /**
- * Fills in fields added after a review was written.
+ * Fills in fields added after a session was written.
  *
- * Reviews persist in IndexedDB and travel in share links, so data written by an
- * older build of the app will keep arriving indefinitely — a link pasted into
- * Discord months ago still has to open. Normalising on read is cheaper and
- * safer than a versioned migration for additive changes like these, and it
- * means every code path below this point can treat the arrays as present.
+ * Sessions persist in IndexedDB and travel in share links, so data written by an
+ * older build will keep arriving indefinitely — a link pasted into Discord
+ * months ago still has to open. Normalising on read is cheaper and safer than a
+ * versioned migration for additive changes, and it lets every code path below
+ * this point treat the arrays as present.
  */
-export function normalizeReview(raw: VodReview): VodReview {
+export function normalizeSession(raw: VodSession): VodSession {
   return {
     ...raw,
-    guilds: raw.guilds ?? [],
-    povs: raw.povs ?? [],
-    markers: raw.markers ?? [],
+    title: raw.title ?? 'Untitled night',
+    streams: raw.streams ?? [],
     deaths: raw.deaths ?? [],
+    events: raw.events ?? [],
+    markers: raw.markers ?? [],
   }
 }

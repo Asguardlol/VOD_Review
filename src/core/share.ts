@@ -2,72 +2,92 @@ import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
 } from 'lz-string'
-import type { VodReview } from './types'
+import type { VodSession } from './types'
 import { newId } from './ids'
-import { normalizeReview } from './normalize'
+import { normalizeSession } from './normalize'
 
 /**
  * Sharing without a server.
  *
- * A review is mostly video ids plus integer offsets, so the whole thing
- * compresses small enough to live in a URL fragment. The fragment is never sent
- * to the server, which is exactly right here — GitHub Pages could not do
- * anything with it anyway.
+ * A session is a report code, a handful of channel names, and some integers, so
+ * the whole thing compresses small enough to live in a URL fragment. The
+ * fragment is never sent to the server, which is exactly right here — GitHub
+ * Pages could not do anything with it anyway.
+ *
+ * The cached fight list is the one bulky part, and it is deliberately dropped
+ * on export: it is re-fetchable from the report code, and keeping it would blow
+ * the link size for data the recipient's own token can retrieve.
  *
  * Practical ceiling: browsers and chat clients start truncating somewhere around
- * 8–32k characters. `encodeReview` reports the length so the UI can warn and
- * offer a JSON download instead of silently handing out a broken link.
+ * 8–32k characters. `encodeSession` reports the length so the UI can warn and
+ * offer a JSON download instead of handing out a broken link.
  */
 
 /** Past this, offer the JSON export instead — some clients will mangle the URL. */
 export const URL_LENGTH_WARN_THRESHOLD = 8000
 
 /**
- * Wire format. Deliberately versioned and separate from `VodReview`: a link
+ * Wire format. Deliberately versioned and separate from `VodSession`: a link
  * pasted into Discord today must still open after the app's model has moved on.
  */
-interface SharePayloadV1 {
-  v: 1
-  review: VodReview
+interface SharePayloadV2 {
+  v: 2
+  session: VodSession
 }
 
-export function encodeReview(review: VodReview): {
+/**
+ * Strips what the recipient can re-fetch. Keeps the report *code* so the app can
+ * reload the fight list, but not the fights themselves.
+ */
+function slimForSharing(session: VodSession): VodSession {
+  return {
+    ...session,
+    report: session.report
+      ? { ...session.report, fights: [], fetchedAt: 0 }
+      : undefined,
+    deaths: [],
+    events: [],
+    // Resolved VODs are per-viewer anyway: they come from a lookup the
+    // recipient will redo with their own Twitch connection.
+    streams: session.streams.map((s) => ({ ...s, resolved: undefined })),
+  }
+}
+
+export function encodeSession(session: VodSession): {
   fragment: string
   length: number
 } {
-  const payload: SharePayloadV1 = { v: 1, review }
+  const payload: SharePayloadV2 = { v: 2, session: slimForSharing(session) }
   const fragment = compressToEncodedURIComponent(JSON.stringify(payload))
   return { fragment, length: fragment.length }
 }
 
 /**
- * Builds the full shareable URL for a review.
+ * Builds the full shareable URL.
  *
  * Hash-based routing means the payload rides after the route, so a deep link
  * works on Pages without a 404.html rewrite.
  */
-export function buildShareUrl(review: VodReview, baseUrl?: string): string {
-  const { fragment } = encodeReview(review)
+export function buildShareUrl(session: VodSession, baseUrl?: string): string {
+  const { fragment } = encodeSession(session)
   const origin = baseUrl ?? window.location.href.split('#')[0]
   return `${origin}#/shared/${fragment}`
 }
 
 /**
- * Decodes a shared review, returning `undefined` rather than throwing on
+ * Decodes a shared session, returning `undefined` rather than throwing on
  * anything malformed — a truncated paste is the expected failure here, not an
  * exceptional one, and the caller shows a "link looks incomplete" message.
  */
-export function decodeReview(fragment: string): VodReview | undefined {
+export function decodeSession(fragment: string): VodSession | undefined {
   try {
     const json = decompressFromEncodedURIComponent(fragment)
     if (!json) return undefined
-    const payload = JSON.parse(json) as SharePayloadV1
-    if (payload?.v !== 1 || !payload.review) return undefined
-    const review = payload.review
-    if (!Array.isArray(review.povs) || typeof review.title !== 'string') {
-      return undefined
-    }
-    return normalizeReview(review)
+    const payload = JSON.parse(json) as SharePayloadV2
+    if (payload?.v !== 2 || !payload.session) return undefined
+    const session = payload.session
+    if (!Array.isArray(session.streams)) return undefined
+    return normalizeSession(session)
   } catch {
     return undefined
   }
@@ -79,10 +99,10 @@ export function decodeReview(fragment: string): VodReview | undefined {
  * Fresh ids on purpose: two people opening the same link and saving it should
  * end up with independent copies, not fight over one id.
  */
-export function adoptSharedReview(review: VodReview): VodReview {
+export function adoptSharedSession(session: VodSession): VodSession {
   const now = Date.now()
   return {
-    ...review,
+    ...session,
     id: newId(),
     publicId: undefined,
     createdAt: now,
@@ -90,15 +110,15 @@ export function adoptSharedReview(review: VodReview): VodReview {
   }
 }
 
-export function exportReviewJson(review: VodReview): string {
-  return JSON.stringify({ v: 1, review } satisfies SharePayloadV1, null, 2)
+export function exportSessionJson(session: VodSession): string {
+  return JSON.stringify({ v: 2, session } satisfies SharePayloadV2, null, 2)
 }
 
-export function importReviewJson(text: string): VodReview | undefined {
+export function importSessionJson(text: string): VodSession | undefined {
   try {
-    const payload = JSON.parse(text) as SharePayloadV1
-    if (payload?.v !== 1 || !payload.review) return undefined
-    return adoptSharedReview(normalizeReview(payload.review))
+    const payload = JSON.parse(text) as SharePayloadV2
+    if (payload?.v !== 2 || !payload.session) return undefined
+    return adoptSharedSession(normalizeSession(payload.session))
   } catch {
     return undefined
   }
