@@ -25,7 +25,7 @@ import { PullBrowser } from './PullBrowser'
 import { StreamTile } from './StreamTile'
 import { TransportBar } from './TransportBar'
 import { MenuButton } from './MenuButton'
-import { WclTokenPanel } from './WclTokenPanel'
+import { WclConnectPanel } from './WclConnectPanel'
 
 interface Props {
   store: SessionStore
@@ -384,7 +384,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
             </p>
           )}
 
-          <WclTokenPanel />
+          <WclConnectPanel />
 
           {session.report ? (
             <PullBrowser

@@ -133,8 +133,8 @@ export class WclGraphQlClient implements WclClient {
 
     if (response.status === 401 || response.status === 403) {
       throw new WclAuthError(
-        'Warcraft Logs rejected the credential. If you pasted a token it has ' +
-          'most likely expired — they are short-lived and need re-pasting.',
+        'Warcraft Logs rejected the sign-in. It has most likely expired — ' +
+          'sign in again to continue.',
       )
     }
     if (response.status === 404) {
@@ -144,8 +144,7 @@ export class WclGraphQlClient implements WclClient {
       // endpoint, and saying "404" alone sends people hunting the wrong thing.
       throw new WclAuthError(
         'Warcraft Logs would not serve that request (HTTP 404). That usually ' +
-          'means the token is missing, expired, or lacks access — not that the ' +
-          'report is missing.',
+          'means the sign-in is missing or expired — not that the report is.',
       )
     }
     if (!response.ok) {
@@ -178,8 +177,8 @@ export class WclGraphQlClient implements WclClient {
     const report = data.reportData.report
     if (!report) {
       throw new WclRequestError(
-        `No report found with code "${reportCode}". Private reports are only ` +
-          'visible to credentials that can see them.',
+        `No report found with code "${reportCode}". If it is private, make ` +
+          'sure the Warcraft Logs account you signed in with can see it.',
       )
     }
 

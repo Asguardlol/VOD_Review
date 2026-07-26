@@ -30,6 +30,13 @@ jobs:
       - run: npm ci
 
       - run: npm run build
+        env:
+          # Set this as a repository *variable* (Settings > Secrets and
+          # variables > Actions > Variables), not a secret. It is public by
+          # design and ends up in the built JavaScript either way — a secret
+          # would only create the false impression that it is hidden.
+          VITE_TWITCH_CLIENT_ID: ${{ vars.VITE_TWITCH_CLIENT_ID }}
+          VITE_WCL_CLIENT_ID: ${{ vars.VITE_WCL_CLIENT_ID }}
 
       - uses: actions/configure-pages@v5
 

@@ -1,54 +1,29 @@
 import type { WclClient } from './client'
 import { WclGraphQlClient } from './graphqlClient'
-import { PastedTokenSource, ProxyTokenSource } from './tokenSources'
+import { getStoredWclToken, isWclConfigured } from './pkce'
 
 /**
- * Which Warcraft Logs integration is active.
+ * Warcraft Logs API endpoint.
  *
- * Defaults to `token`: this is hosted on GitHub Pages, which is static-only, so
- * there is no server to hide a client secret behind and the proxy option would
- * mean standing up a separate deployment. Pasting a personal bearer token is the
- * only approach that works on Pages alone.
- *
- * What that means in practice: the token lives in this browser's
- * `localStorage`, it goes nowhere except warcraftlogs.com, and it expires — so
- * it needs re-pasting periodically. That is acceptable for a personal or guild
- * tool. If this is ever opened up to people who can't generate their own token,
- * switch to `proxy` and stand up the Worker; the client code does not change.
- *
- * Override with `VITE_WCL_MODE`:
- *   token    — user pastes their own bearer token (no backend; the default)
- *   proxy    — VITE_WCL_ENDPOINT points at a backend holding the client secret
- *   disabled — no Warcraft Logs features at all
+ * `/user`, not `/client`: PKCE produces a *user* access token, and WCL routes
+ * those through the user endpoint. Pointing a user token at `/client` fails in
+ * ways that look like a bad query rather than a bad endpoint.
  */
-export type WclMode = 'disabled' | 'token' | 'proxy'
+const WCL_USER_API = 'https://www.warcraftlogs.com/api/v2/user'
 
-const WCL_API = 'https://www.warcraftlogs.com/api/v2/client'
-
-export function getWclMode(): WclMode {
-  const mode = import.meta.env.VITE_WCL_MODE
-  if (mode === 'proxy' || mode === 'disabled') return mode
-  return 'token'
-}
-
-/** Returns `undefined` when WCL is off, which every caller must handle. */
+/**
+ * Returns `undefined` when Warcraft Logs is unconfigured or not connected,
+ * which every caller must handle — the app still works without it, just with
+ * no pull browser and no death markers.
+ */
 export function createWclClient(): WclClient | undefined {
-  switch (getWclMode()) {
-    case 'token':
-      return new WclGraphQlClient(WCL_API, new PastedTokenSource())
-    case 'proxy': {
-      const endpoint = import.meta.env.VITE_WCL_ENDPOINT
-      if (!endpoint) {
-        // Misconfiguration, not a user error — failing loudly here beats
-        // silently posting queries at warcraftlogs.com with no credential.
-        console.error('VITE_WCL_MODE=proxy requires VITE_WCL_ENDPOINT to be set.')
-        return undefined
-      }
-      return new WclGraphQlClient(endpoint, new ProxyTokenSource())
-    }
-    case 'disabled':
-      return undefined
-  }
+  if (!isWclConfigured()) return undefined
+  return new WclGraphQlClient(WCL_USER_API, {
+    describe: 'Signed in with Warcraft Logs',
+    async getToken() {
+      return getStoredWclToken()
+    },
+  })
 }
 
 /**

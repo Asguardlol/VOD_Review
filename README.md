@@ -58,17 +58,24 @@ instead of by the longest VOD, makes timeline zero mean *pull start*, and draws
 **death lines** on the scrub bar in class colours. Clicking one jumps to five
 seconds before the death — the useful question is what killed them.
 
-You supply your own WCL bearer token, which is stored in your browser's
-`localStorage` and sent nowhere except warcraftlogs.com. That is the only
-approach that works on static hosting: WCL's OAuth2 client-credentials flow
-needs a client secret, and a secret cannot live in a frontend — anything shipped
-to the browser is public. Tokens expire, so this needs re-pasting periodically.
+You sign in with your own Warcraft Logs account, using OAuth authorization code
++ **PKCE**. No token to paste, no secret anywhere — PKCE exists precisely for
+clients that cannot hold one, which is the situation any static site is in.
+Signing in as yourself is also what makes **private and guild reports** work.
 
-If this is ever opened up to people who can't generate their own token, build
-with `VITE_WCL_MODE=proxy` and point `VITE_WCL_ENDPOINT` at a small backend that
-holds the secret. The client code is identical either way. See `.env.example`.
+Register the client at warcraftlogs.com/api/clients with **"Public Client"**
+ticked, and set `VITE_WCL_CLIENT_ID`. See `.env.example`.
 
 Everything else in the app works with Warcraft Logs unconfigured.
+
+## Twitch
+
+Streams are identified by channel name, not by video: the app finds whichever
+VOD covers the report's time range. That needs a Twitch app Client ID
+(`VITE_TWITCH_CLIENT_ID`) and uses the implicit grant flow — again no secret.
+
+Neither Client ID is sensitive. Both appear in the authorize URL every user is
+sent to, and both are inlined into the built JavaScript regardless.
 
 ## Storage and sharing
 
