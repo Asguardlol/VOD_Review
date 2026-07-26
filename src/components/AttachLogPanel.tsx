@@ -41,31 +41,21 @@ export function AttachLogPanel({ client, fight, onAttach, onDetach }: Props) {
   if (mode === 'disabled') {
     return (
       <details className="log-panel">
-        <summary>Warcraft Logs — not configured</summary>
+        <summary>Warcraft Logs — turned off</summary>
         <div className="log-panel-body">
           <p>
             Death lines on the timeline and log browsing need the Warcraft Logs
-            API. It is off because enabling it requires choosing how to
-            authenticate, and the options differ in ways worth deciding
-            deliberately:
+            API, and this build was made with{' '}
+            <code>VITE_WCL_MODE=disabled</code>.
           </p>
-          <ul>
-            <li>
-              <strong>Paste your own token</strong> (<code>VITE_WCL_MODE=token</code>)
-              — no backend, works on GitHub Pages today. Tokens expire and need
-              re-pasting, it only works for people who can generate one, and the
-              token sits in <code>localStorage</code>.
-            </li>
-            <li>
-              <strong>Run a proxy</strong> (<code>VITE_WCL_MODE=proxy</code> plus{' '}
-              <code>VITE_WCL_ENDPOINT</code>) — a Cloudflare Worker holds the
-              client secret. The only option that works for people who aren't
-              you. Costs one more deployed thing.
-            </li>
-          </ul>
+          <p>
+            Rebuild without it to paste your own bearer token, or set{' '}
+            <code>VITE_WCL_MODE=proxy</code> with <code>VITE_WCL_ENDPOINT</code> to
+            go through a backend that holds the client secret. Both run the same
+            client code, so it is a build variable rather than a change to the app.
+          </p>
           <p className="dim">
-            Both are already wired to the same code path, so switching is a build
-            variable rather than a change to the app.
+            Everything else — POVs, syncing, markers, sharing — works without it.
           </p>
         </div>
       </details>
@@ -74,6 +64,11 @@ export function AttachLogPanel({ client, fight, onAttach, onDetach }: Props) {
 
   const load = async () => {
     if (!client) return
+    // Don't spend a round trip to be told what we already know.
+    if (mode === 'token' && !hasToken) {
+      setError('Save a Warcraft Logs bearer token first — the box above.')
+      return
+    }
     const code = parseReportCode(input)
     if (!code) {
       setError('That does not look like a Warcraft Logs report link or code.')

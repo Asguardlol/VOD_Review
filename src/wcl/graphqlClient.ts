@@ -136,6 +136,17 @@ export class WclGraphQlClient implements WclClient {
           'most likely expired — they are short-lived and need re-pasting.',
       )
     }
+    if (response.status === 404) {
+      // The GraphQL endpoint answers 404 rather than 401 when it will not serve
+      // the request at all. A missing *report* comes back as a null field in a
+      // 200, not as an HTTP 404 — so this is about the credential or the
+      // endpoint, and saying "404" alone sends people hunting the wrong thing.
+      throw new WclAuthError(
+        'Warcraft Logs would not serve that request (HTTP 404). That usually ' +
+          'means the token is missing, expired, or lacks access — not that the ' +
+          'report is missing.',
+      )
+    }
     if (!response.ok) {
       throw new WclRequestError(`Warcraft Logs returned HTTP ${response.status}.`)
     }

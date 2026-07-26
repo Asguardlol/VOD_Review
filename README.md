@@ -51,19 +51,24 @@ Exactly one POV is audible at a time (the 🔊 button). The rest are muted, whic
 is both what makes many streams bearable and what lets them all start together —
 browsers exempt muted playback from the autoplay gesture requirement.
 
-## Warcraft Logs (optional, off by default)
+## Warcraft Logs
 
 Attaching a pull from a Warcraft Logs report bounds the timeline by the fight
 instead of by the longest VOD, makes timeline zero mean *pull start*, and draws
 **death lines** on the scrub bar in class colours. Clicking one jumps to five
 seconds before the death — the useful question is what killed them.
 
-This is disabled unless configured, because WCL's OAuth2 client-credentials flow
-needs a client secret, and a secret cannot live in a static frontend. See
-`.env.example` for the two supported approaches (`token` and `proxy`); both run
-through the same client code, so switching is a build variable.
+You supply your own WCL bearer token, which is stored in your browser's
+`localStorage` and sent nowhere except warcraftlogs.com. That is the only
+approach that works on static hosting: WCL's OAuth2 client-credentials flow
+needs a client secret, and a secret cannot live in a frontend — anything shipped
+to the browser is public. Tokens expire, so this needs re-pasting periodically.
 
-Everything else in the app works with WCL off.
+If this is ever opened up to people who can't generate their own token, build
+with `VITE_WCL_MODE=proxy` and point `VITE_WCL_ENDPOINT` at a small backend that
+holds the secret. The client code is identical either way. See `.env.example`.
+
+Everything else in the app works with Warcraft Logs unconfigured.
 
 ## Storage and sharing
 
