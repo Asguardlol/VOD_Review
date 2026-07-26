@@ -1,14 +1,22 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReviewStore } from '../core/storage'
-import type { VodPov, VodReview } from '../core/types'
+import type { VodGuild, VodPov, VodReview } from '../core/types'
 import { useReview } from '../hooks/useReview'
 import { useTimeline } from '../hooks/useTimeline'
 import { newId } from '../core/ids'
-import { buildShareUrl, exportReviewJson, URL_LENGTH_WARN_THRESHOLD, encodeReview } from '../core/share'
+import {
+  buildShareUrl,
+  encodeReview,
+  exportReviewJson,
+  URL_LENGTH_WARN_THRESHOLD,
+} from '../core/share'
 import { PovTile } from './PovTile'
 import { TransportBar } from './TransportBar'
 import { AddPovForm } from './AddPovForm'
 import { MenuButton } from './MenuButton'
+import { PovSidebar } from './PovSidebar'
+import { AttachLogPanel } from './AttachLogPanel'
+import { createWclClient } from '../wcl/config'
 
 interface Props {
   store: ReviewStore
@@ -16,19 +24,47 @@ interface Props {
   onBack(): void
 }
 
-/** Guild filter value meaning "show everything". */
-const ALL = '__all__'
+/**
+ * How many POVs can play at once.
+ *
+ * Four is a deliberate ceiling, not a technical one: past four the tiles are too
+ * small to read anything useful off, and four simultaneous video streams is
+ * already a lot to ask of a connection. The sidebar is how a review holds far
+ * more than four and stays browsable.
+ */
+const MAX_WATCHING = 4
 
 export function ReviewView({ store, reviewId, onBack }: Props) {
   const { review, loading, update } = useReview(store, reviewId)
   const { engine, state } = useTimeline()
-  const [activeGuild, setActiveGuild] = useState<string>(ALL)
+  // Undefined when Warcraft Logs is not configured. Everything else still works.
+  const wclClient = useMemo(() => createWclClient(), [])
 
-  const visiblePovs = useMemo(() => {
-    if (!review) return []
-    if (activeGuild === ALL) return review.povs
-    return review.povs.filter((p) => (p.vodGuildId ?? '') === activeGuild)
-  }, [review, activeGuild])
+  /**
+   * Which POVs are on screen. View state, deliberately not persisted — it is
+   * about what you're looking at right now, not a property of the review.
+   */
+  const [watching, setWatching] = useState<string[]>([])
+
+  // One stream is the default: the first POV starts watched, and a review that
+  // ends up with nothing selected falls back rather than showing a blank grid.
+  useEffect(() => {
+    if (!review) return
+    setWatching((current) => {
+      const stillValid = current.filter((id) => review.povs.some((p) => p.id === id))
+      if (stillValid.length > 0) return stillValid
+      const first = review.povs[0]?.id
+      return first ? [first] : []
+    })
+  }, [review])
+
+  const watchedPovs = useMemo(
+    () =>
+      watching
+        .map((id) => review?.povs.find((p) => p.id === id))
+        .filter((p): p is VodPov => p !== undefined),
+    [watching, review],
+  )
 
   if (loading) return <p className="pad">Loading…</p>
   if (!review) {
@@ -46,10 +82,14 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
     mutate((r) => ({
       ...r,
       povs: [...r.povs, pov],
-      // First POV added becomes the audible one, so there is always exactly one.
       audioPovId: r.audioPovId ?? pov.id,
     }))
     if (!review.audioPovId) engine.setAudioPov(pov.id)
+    // A newly added POV is almost always the one you want to look at, but not
+    // at the cost of evicting something already on screen.
+    setWatching((current) =>
+      current.length < MAX_WATCHING ? [...current, pov.id] : current,
+    )
   }
 
   const removePov = (povId: string) => {
@@ -58,11 +98,31 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
       const audioPovId = r.audioPovId === povId ? povs[0]?.id : r.audioPovId
       return { ...r, povs, audioPovId }
     })
+    setWatching((current) => current.filter((id) => id !== povId))
   }
+
+  const toggleWatch = (povId: string) => {
+    setWatching((current) => {
+      if (current.includes(povId)) return current.filter((id) => id !== povId)
+      if (current.length >= MAX_WATCHING) return current
+      return [...current, povId]
+    })
+  }
+
+  const soloWatch = (povId: string) => setWatching([povId])
 
   const setAudio = (povId: string) => {
     mutate((r) => ({ ...r, audioPovId: povId }))
     engine.setAudioPov(povId)
+    // Audio only reaches you from a POV that is actually mounted, so listening
+    // to something implies watching it.
+    setWatching((current) =>
+      current.includes(povId)
+        ? current
+        : current.length >= MAX_WATCHING
+          ? [...current.slice(0, MAX_WATCHING - 1), povId]
+          : [...current, povId],
+    )
   }
 
   /**
@@ -87,6 +147,13 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
     }))
   }
 
+  const movePov = (povId: string, guildId: string | undefined) => {
+    mutate((r) => ({
+      ...r,
+      povs: r.povs.map((p) => (p.id === povId ? { ...p, vodGuildId: guildId } : p)),
+    }))
+  }
+
   const markUnavailable = (
     povId: string,
     reason: NonNullable<VodPov['unavailableReason']>,
@@ -100,9 +167,28 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
   const addGuild = () => {
     const name = window.prompt('Group name (guild, team, roster…)')
     if (!name?.trim()) return
-    const guild = { id: newId(), name: name.trim() }
-    mutate((r) => ({ ...r, guilds: [...r.guilds, guild] }))
-    setActiveGuild(guild.id)
+    mutate((r) => ({ ...r, guilds: [...r.guilds, { id: newId(), name: name.trim() }] }))
+  }
+
+  const renameGuild = (guild: VodGuild) => {
+    const next = window.prompt('Group name', guild.name)
+    if (!next?.trim()) return
+    mutate((r) => ({
+      ...r,
+      guilds: r.guilds.map((g) => (g.id === guild.id ? { ...g, name: next.trim() } : g)),
+    }))
+  }
+
+  const removeGuild = (guildId: string) => {
+    mutate((r) => ({
+      ...r,
+      guilds: r.guilds.filter((g) => g.id !== guildId),
+      // Orphaned POVs become ungrouped. Deleting a group is an organizational
+      // action; it must never destroy footage.
+      povs: r.povs.map((p) =>
+        p.vodGuildId === guildId ? { ...p, vodGuildId: undefined } : p,
+      ),
+    }))
   }
 
   const addMarker = () => {
@@ -115,6 +201,16 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
         { id: newId(), atMs: Math.round(state.positionMs), label: label.trim() },
       ],
     }))
+  }
+
+  const downloadJson = () => {
+    const blob = new Blob([exportReviewJson(review)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${review.title.replace(/[^\w-]+/g, '_') || 'review'}.review.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   const share = () => {
@@ -132,16 +228,6 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
     void navigator.clipboard.writeText(buildShareUrl(review))
   }
 
-  const downloadJson = () => {
-    const blob = new Blob([exportReviewJson(review)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${review.title.replace(/[^\w-]+/g, '_') || 'review'}.review.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
   return (
     <div className="review-view">
       <header className="review-header">
@@ -154,10 +240,13 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
         </button>
         <MenuButton
           actions={[
-            { label: 'Rename review…', onSelect: () => {
-              const next = window.prompt('Review title', review.title)
-              if (next?.trim()) mutate((r) => ({ ...r, title: next.trim() }))
-            } },
+            {
+              label: 'Rename review…',
+              onSelect: () => {
+                const next = window.prompt('Review title', review.title)
+                if (next?.trim()) mutate((r) => ({ ...r, title: next.trim() }))
+              },
+            },
             { label: 'Add group…', onSelect: addGuild },
             { label: 'Download JSON', onSelect: downloadJson },
             {
@@ -176,68 +265,71 @@ export function ReviewView({ store, reviewId, onBack }: Props) {
         engine={engine}
         state={state}
         markers={review.markers}
-        durationMs={engine.durationMs()}
+        deaths={review.deaths}
+        // A log bounds the timeline by the pull. Without one there is nothing
+        // authoritative to bound it by, so it falls back to the longest VOD.
+        durationMs={review.fight?.durationMs ?? engine.durationMs()}
+        boundedByFight={review.fight !== undefined}
         onAddMarker={addMarker}
         onSeekMarker={(m) => engine.seekTo(m.atMs)}
       />
 
-      {review.guilds.length > 0 && (
-        <nav className="guild-tabs">
-          <button
-            className={activeGuild === ALL ? 'active' : undefined}
-            onClick={() => setActiveGuild(ALL)}
-          >
-            All ({review.povs.length})
-          </button>
-          {review.guilds.map((guild) => {
-            const count = review.povs.filter((p) => p.vodGuildId === guild.id).length
-            return (
-              <button
-                key={guild.id}
-                className={activeGuild === guild.id ? 'active' : undefined}
-                onClick={() => setActiveGuild(guild.id)}
-              >
-                {guild.name} ({count})
-              </button>
-            )
-          })}
-          <button
-            className={activeGuild === '' ? 'active' : undefined}
-            onClick={() => setActiveGuild('')}
-          >
-            Ungrouped ({review.povs.filter((p) => !p.vodGuildId).length})
-          </button>
-        </nav>
-      )}
+      <div className="review-body">
+        <PovSidebar
+          guilds={review.guilds}
+          povs={review.povs}
+          watching={watching}
+          maxWatching={MAX_WATCHING}
+          audioPovId={review.audioPovId}
+          onToggleWatch={toggleWatch}
+          onSoloWatch={soloWatch}
+          onMakeAudio={setAudio}
+          onRenamePov={renamePov}
+          onRemovePov={removePov}
+          onMovePov={movePov}
+          onAddGuild={addGuild}
+          onRenameGuild={renameGuild}
+          onRemoveGuild={removeGuild}
+        />
 
-      <AddPovForm
-        guilds={review.guilds}
-        defaultGuildId={activeGuild === ALL ? undefined : activeGuild}
-        onAdd={addPov}
-      />
+        <main className="review-main">
+          <AttachLogPanel
+            client={wclClient}
+            fight={review.fight}
+            onAttach={(fight, deaths) => mutate((r) => ({ ...r, fight, deaths }))}
+            onDetach={() =>
+              mutate((r) => ({ ...r, fight: undefined, deaths: [] }))
+            }
+          />
 
-      {review.povs.length === 0 ? (
-        <p className="empty">
-          No POVs yet. Paste a YouTube or Twitch VOD link above to add the first one.
-        </p>
-      ) : (
-        <div className="pov-grid">
-          {visiblePovs.map((pov) => (
-            <PovTile
-              key={pov.id}
-              pov={pov}
-              engine={engine}
-              isAudio={review.audioPovId === pov.id}
-              isStalled={state.stalledPovIds.includes(pov.id)}
-              onMakeAudio={() => setAudio(pov.id)}
-              onSyncHere={() => syncHere(pov.id)}
-              onRename={() => renamePov(pov)}
-              onRemove={() => removePov(pov.id)}
-              onUnavailable={(reason) => markUnavailable(pov.id, reason)}
-            />
-          ))}
-        </div>
-      )}
+          <AddPovForm guilds={review.guilds} onAdd={addPov} />
+
+          {review.povs.length === 0 ? (
+            <p className="empty">
+              No POVs yet. Paste a YouTube or Twitch VOD link above to add the first one.
+            </p>
+          ) : watchedPovs.length === 0 ? (
+            <p className="empty">Pick a POV from the list to start watching.</p>
+          ) : (
+            <div className="pov-grid" data-count={watchedPovs.length}>
+              {watchedPovs.map((pov) => (
+                <PovTile
+                  key={pov.id}
+                  pov={pov}
+                  engine={engine}
+                  isAudio={review.audioPovId === pov.id}
+                  isStalled={state.stalledPovIds.includes(pov.id)}
+                  onMakeAudio={() => setAudio(pov.id)}
+                  onSyncHere={() => syncHere(pov.id)}
+                  onRename={() => renamePov(pov)}
+                  onRemove={() => removePov(pov.id)}
+                  onUnavailable={(reason) => markUnavailable(pov.id, reason)}
+                />
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

@@ -7,6 +7,7 @@ import {
   type StoreCapabilities,
 } from './storage'
 import { newId } from './ids'
+import { normalizeReview } from './normalize'
 
 interface VodReviewDB extends DBSchema {
   reviews: {
@@ -64,7 +65,8 @@ export class LocalReviewStore implements ReviewStore {
 
   async getReview(id: string): Promise<VodReview | undefined> {
     const db = await this.#open()
-    return db.get('reviews', id)
+    const stored = await db.get('reviews', id)
+    return stored ? normalizeReview(stored) : undefined
   }
 
   async createReview(title: string): Promise<VodReview> {
@@ -75,6 +77,7 @@ export class LocalReviewStore implements ReviewStore {
       guilds: [],
       povs: [],
       markers: [],
+      deaths: [],
       createdAt: now,
       updatedAt: now,
     }

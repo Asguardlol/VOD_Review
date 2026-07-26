@@ -77,6 +77,64 @@ export interface VodMarker {
   note?: string
 }
 
+// ---------------------------------------------------------------------------
+// Warcraft Logs
+// ---------------------------------------------------------------------------
+
+/**
+ * The pull a review is about, pulled from a Warcraft Logs report.
+ *
+ * Attaching one changes what timeline zero means: it becomes **pull start**
+ * rather than an arbitrary point the user picked. That is what lets log event
+ * times (deaths especially) be placed on the same timeline as the videos, and it
+ * bounds the scrub bar by the fight rather than by the longest VOD.
+ *
+ * Optional throughout the app — a review with no log still works, it just has no
+ * death lines and an unbounded timeline.
+ */
+export interface VodFight {
+  /** Report code from the WCL URL, e.g. `aBcDeF123`. */
+  reportCode: string
+  /** Fight id within that report. Unique per report, not globally. */
+  fightId: number
+  encounterId: number
+  encounterName: string
+  /** Which attempt this was, as WCL numbers them. */
+  pullNumber?: number
+  /** WCL difficulty id (3 normal, 4 heroic, 5 mythic for raids). */
+  difficulty?: number
+  difficultyName?: string
+  kill?: boolean
+  /** Best percentage reached, for a wipe. */
+  bossPercentage?: number
+  /** Fight length. This is what the scrub bar spans. */
+  durationMs: number
+  /**
+   * Report-relative start/end in ms, exactly as WCL reports them. Kept so
+   * further queries against the same report can be re-scoped without refetching
+   * the fight list.
+   */
+  startTime: number
+  endTime: number
+}
+
+/**
+ * One death during the pull.
+ *
+ * `atMs` is relative to pull start, which is timeline zero whenever a fight is
+ * attached — so a death renders on the scrub bar with no further conversion.
+ */
+export interface VodDeath {
+  id: string
+  atMs: number
+  playerName: string
+  wowClass?: WowClass
+  /** The ability that killed them, when the log records one. */
+  killingBlow?: string
+  /** WCL actor id, so a death can be matched to a POV's raider later. */
+  sourceActorId?: number
+}
+
 export interface VodReview {
   id: string
   /** Appears in share URLs. Distinct from `id` so local and shared ids differ. */
@@ -93,6 +151,16 @@ export interface VodReview {
    * makes starting many players at once work at all.
    */
   audioPovId?: string
+  /**
+   * The pull this review covers, when one has been attached from Warcraft Logs.
+   *
+   * When set, timeline zero is pull start and the scrub bar spans the fight.
+   * When absent everything still works — the timeline is just bounded by the
+   * longest VOD instead, and there are no death lines.
+   */
+  fight?: VodFight
+  /** Deaths during the pull, from the log. Empty when no log is attached. */
+  deaths: VodDeath[]
   /**
    * Optional link back to a raid plan this review is about — a URL or id only.
    * This is the seam between the two projects; do not couple them in code.

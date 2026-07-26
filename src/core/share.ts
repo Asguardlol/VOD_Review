@@ -4,6 +4,7 @@ import {
 } from 'lz-string'
 import type { VodReview } from './types'
 import { newId } from './ids'
+import { normalizeReview } from './normalize'
 
 /**
  * Sharing without a server.
@@ -66,7 +67,7 @@ export function decodeReview(fragment: string): VodReview | undefined {
     if (!Array.isArray(review.povs) || typeof review.title !== 'string') {
       return undefined
     }
-    return review
+    return normalizeReview(review)
   } catch {
     return undefined
   }
@@ -97,7 +98,7 @@ export function importReviewJson(text: string): VodReview | undefined {
   try {
     const payload = JSON.parse(text) as SharePayloadV1
     if (payload?.v !== 1 || !payload.review) return undefined
-    return adoptSharedReview(payload.review)
+    return adoptSharedReview(normalizeReview(payload.review))
   } catch {
     return undefined
   }

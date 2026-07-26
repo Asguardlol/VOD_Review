@@ -41,6 +41,30 @@ These are real constraints, not missing features:
 - **Twitch has no playback-rate control**, so speed adjustment is only available
   when every POV in a review is YouTube.
 
+## Watching several angles at once
+
+One stream is the default. The sidebar lists every POV grouped by guild/team;
+checking a POV adds it to the grid, clicking its name solos it. Up to **four**
+can play together — 1 fills the area, 2 sit side by side, 3–4 tile 2×2.
+
+Exactly one POV is audible at a time (the 🔊 button). The rest are muted, which
+is both what makes many streams bearable and what lets them all start together —
+browsers exempt muted playback from the autoplay gesture requirement.
+
+## Warcraft Logs (optional, off by default)
+
+Attaching a pull from a Warcraft Logs report bounds the timeline by the fight
+instead of by the longest VOD, makes timeline zero mean *pull start*, and draws
+**death lines** on the scrub bar in class colours. Clicking one jumps to five
+seconds before the death — the useful question is what killed them.
+
+This is disabled unless configured, because WCL's OAuth2 client-credentials flow
+needs a client secret, and a secret cannot live in a static frontend. See
+`.env.example` for the two supported approaches (`token` and `proxy`); both run
+through the same client code, so switching is a build variable.
+
+Everything else in the app works with WCL off.
+
 ## Storage and sharing
 
 There is no server. This is a static site.

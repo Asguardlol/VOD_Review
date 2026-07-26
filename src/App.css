@@ -226,35 +226,249 @@ select {
   border: none;
 }
 
-.marker-strip {
-  position: relative;
-  height: 10px;
+/* Death lines run behind the range input, so the thumb stays grabbable. */
+.death-strip {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 22px;
+  pointer-events: none;
 }
 
-.marker-pip {
+.death-line {
   position: absolute;
   top: 0;
-  width: 3px;
-  height: 10px;
-  padding: 0;
-  border: none;
-  border-radius: 1px;
-  background: var(--warn);
+  bottom: 0;
+  width: 2px;
+  background: var(--danger);
+  opacity: 0.75;
   transform: translateX(-1px);
 }
 
-/* ---- Guild tabs ---- */
-
-.guild-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 20px 0;
+.pip-strip {
+  position: relative;
+  height: 12px;
 }
 
-.guild-tabs button.active {
-  border-color: var(--accent);
+.death-pip,
+.marker-pip {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  transform: translateX(-3px);
+}
+
+.death-pip {
+  background: var(--danger);
+}
+
+.marker-pip {
+  background: var(--warn);
+}
+
+.death-pip:hover,
+.marker-pip:hover {
+  outline: 1px solid var(--text);
+}
+
+/* ---- Body split: selector on the side, players in the main area ---- */
+
+.review-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+}
+
+.review-main {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .review-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- POV sidebar ---- */
+
+.pov-sidebar {
+  border-right: 1px solid var(--border);
+  padding-bottom: 24px;
+  min-height: 60vh;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 10px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 8px 6px 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.sidebar-group h3 .menu-root {
+  margin-left: auto;
+}
+
+.guild-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex: none;
+}
+
+.sidebar-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-group li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 14px;
+}
+
+.sidebar-group li.watching {
+  background: rgb(74 158 255 / 10%);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sidebar-pov-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pov-warn {
+  color: var(--warn);
+}
+
+.sidebar-empty {
+  margin: 0;
+  padding: 2px 14px 6px;
+  font-size: 12px;
+}
+
+/* ---- Warcraft Logs panel ---- */
+
+.log-panel {
+  margin: 12px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.log-panel > summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.log-panel-body {
+  padding: 0 14px 14px;
+  font-size: 13px;
+}
+
+.log-panel-body p,
+.log-panel-body ul {
+  margin: 0 0 10px;
+}
+
+.log-panel-body ul {
+  padding-left: 18px;
+}
+
+.log-panel-body li {
+  margin-bottom: 6px;
+}
+
+.log-panel code {
+  background: var(--surface-raised);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.token-form,
+.report-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.token-form p {
+  flex-basis: 100%;
+}
+
+.token-form input,
+.report-form input {
+  flex: 1;
+  min-width: 240px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
   color: var(--accent);
+  text-decoration: underline;
+}
+
+.fight-list h4 {
+  margin: 4px 0 8px;
+}
+
+.fight-list h5 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.fight-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+}
+
+.fight-list li button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
 }
 
 /* ---- Add POV ---- */
@@ -286,11 +500,34 @@ select {
 
 /* ---- POV grid ---- */
 
+/*
+ * Layout is driven by how many POVs are on screen, not by available width:
+ * 1 -> one big player, 2 -> side by side, 3-4 -> 2x2. Two stacked vertically
+ * would waste the horizontal space that makes two angles comparable at all.
+ */
 .pov-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
   padding: 12px 20px 32px;
+}
+
+.pov-grid[data-count='1'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pov-grid[data-count='2'],
+.pov-grid[data-count='3'],
+.pov-grid[data-count='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Narrow screens can't honour side-by-side without making both unreadable. */
+@media (max-width: 700px) {
+  .pov-grid[data-count='2'],
+  .pov-grid[data-count='3'],
+  .pov-grid[data-count='4'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .pov-tile {
