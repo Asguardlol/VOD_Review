@@ -1,0 +1,26 @@
+# Normalize line endings. Developed on Windows, built on Linux in CI — without
+# this, checkouts on different platforms produce whole-file diffs.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never touch, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp4 binary
+*.webm binary
+
+# Generated — collapse in PR diffs and don't let it inflate language stats.
+package-lock.json linguist-generated=true -diff
