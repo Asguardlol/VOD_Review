@@ -27,6 +27,21 @@ export function createWclClient(): WclClient | undefined {
 }
 
 /**
+ * A confident match, for deciding whether to fire a request without being asked.
+ *
+ * Stricter than `parseReportCode` on purpose. That one falls back to accepting
+ * any alphanumeric string, which is right when the user has explicitly asked to
+ * load something — but as an auto-trigger it would fire on the first letter of
+ * anything typed. This only matches a real report URL or a full-length code.
+ */
+export function confidentReportCode(input: string): string | undefined {
+  const trimmed = input.trim()
+  const fromUrl = /warcraftlogs\.com\/reports\/([a-zA-Z0-9]+)/.exec(trimmed)
+  if (fromUrl) return fromUrl[1]
+  return /^[a-zA-Z0-9]{16}$/.test(trimmed) ? trimmed : undefined
+}
+
+/**
  * Pulls a report code out of whatever the user pasted.
  *
  * Accepts a full report URL (with or without a `#fight=` fragment) or a bare

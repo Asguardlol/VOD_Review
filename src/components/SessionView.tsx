@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionStore } from '../core/storage'
 import type { VodFight, VodStream } from '../core/types'
 import { useSession } from '../hooks/useSession'
@@ -12,7 +12,7 @@ import {
   importSessionJson,
   URL_LENGTH_WARN_THRESHOLD,
 } from '../core/share'
-import { createWclClient, parseReportCode } from '../wcl/config'
+import { confidentReportCode, createWclClient, parseReportCode } from '../wcl/config'
 import { parseChannelLogin } from '../twitch/helix'
 import { TwitchAuthError } from '../twitch/client'
 import { createTwitchClient } from '../twitch/config'
@@ -54,6 +54,12 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [twitchConnected, setTwitchConnected] = useState(() => !!getStoredToken())
+  /**
+   * Last code auto-loaded, so re-editing the same text doesn't refire.
+   * A ref rather than state: it must update synchronously within the same
+   * change handler that reads it, or a fast paste fires twice.
+   */
+  const lastLoadedRef = useRef<string | undefined>(undefined)
 
   const selectedFight = useMemo(
     () => session?.report?.fights.find((f) => f.fightId === session.selectedFightId),
@@ -421,13 +427,33 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
               <label className="dim">Paste URL for public or unlisted logs</label>
               <input
                 value={reportInput}
-                onChange={(e) => setReportInput(e.target.value)}
+                disabled={busy}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setReportInput(value)
+                  // Load as soon as the input is unmistakably a report, so the
+                  // common case — pasting a link — needs no second action.
+                  // Covers paste, drag-drop and autofill alike, since all of
+                  // them land here, unlike a paste-only handler.
+                  const code = confidentReportCode(value)
+                  if (code && code !== lastLoadedRef.current) {
+                    lastLoadedRef.current = code
+                    void loadReport(value)
+                  }
+                }}
                 placeholder="WarcraftLogs Report URL"
                 aria-label="Report URL"
               />
-              <button type="submit" disabled={busy || !wclClient}>
-                {busy ? 'Loading…' : 'Load report'}
-              </button>
+              {busy && <span className="dim">Loading report…</span>}
+              {/*
+                Kept for the cases auto-detect deliberately won't fire on: an
+                older short report code, or a code typed by hand.
+              */}
+              {!busy && reportInput.trim() && !confidentReportCode(reportInput) && (
+                <button type="submit" disabled={!wclClient}>
+                  Load report
+                </button>
+              )}
             </form>
           )}
 
