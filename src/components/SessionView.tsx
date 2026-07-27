@@ -87,6 +87,21 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   }, [session])
 
   /**
+   * With exactly one stream on screen, it is the one you are listening to.
+   *
+   * Otherwise soloing a stream that happened not to be the audio stream played
+   * silence: the audible one was no longer mounted, nothing could be heard, and
+   * with the per-tile control hidden there was no visible way to fix it.
+   */
+  useEffect(() => {
+    if (watching.length !== 1 || !session) return
+    const only = watching[0]
+    if (session.audioStreamId === only) return
+    update((s) => ({ ...s, audioStreamId: only }))
+    engine.setAudioPov(only)
+  }, [watching, session, update, engine])
+
+  /**
    * Finds each stream's VOD for the report's time range.
    *
    * Runs per stream and records failures on the stream rather than aborting:
@@ -553,6 +568,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
                     timelineOffsetMs={offset}
                     engine={engine}
                     isAudio={session.audioStreamId === stream.id}
+                    canChooseAudio={watched.length > 1}
                     isStalled={state.stalledPovIds.includes(stream.id)}
                     onMakeAudio={() => setAudio(stream.id)}
                     onNudgeDelay={(delta) => nudgeDelay(stream.id, delta)}

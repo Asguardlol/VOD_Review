@@ -12,6 +12,8 @@ interface Props {
   timelineOffsetMs: number
   engine: TimelineEngine
   isAudio: boolean
+  /** True when more than one stream is on screen, so there is a choice to make. */
+  canChooseAudio: boolean
   isStalled: boolean
   onMakeAudio(): void
   onNudgeDelay(deltaMs: number): void
@@ -33,6 +35,7 @@ export function StreamTile({
   timelineOffsetMs,
   engine,
   isAudio,
+  canChooseAudio,
   isStalled,
   onMakeAudio,
   onNudgeDelay,
@@ -102,10 +105,22 @@ export function StreamTile({
     <div className={`pov-tile${isAudio ? ' is-audio' : ''}${isStalled ? ' is-stalled' : ''}`}>
       <div className="pov-header">
         {/*
-          No audio marker here. Which stream is audible is chosen and shown in
-          the sidebar, and the tile already carries an accent border when it is
-          the audible one — a speaker glyph on top of that was noise.
+          Only shown with more than one stream up, because only then is there
+          anything to choose. With a single stream it is necessarily the one you
+          are hearing, and a control whose answer is forced reads as a volume
+          button — which is how it was misread before.
         */}
+        {canChooseAudio && (
+          <button
+            className={`audio-toggle${isAudio ? ' active' : ''}`}
+            title={isAudio ? 'You are hearing this stream' : `Listen to ${stream.label}`}
+            onClick={onMakeAudio}
+            disabled={isAudio || !!error}
+          >
+            {isAudio ? '🔊' : '🔇'}
+          </button>
+        )}
+
         <span className="pov-label" title={vod.title ?? stream.label}>
           {stream.label}
         </span>
@@ -140,11 +155,6 @@ export function StreamTile({
 
         <MenuButton
           actions={[
-            {
-              label: isAudio ? 'Already the audible stream' : 'Listen to this stream',
-              onSelect: onMakeAudio,
-              disabled: isAudio || !!error,
-            },
             { label: 'Edit stream…', onSelect: onEdit },
             {
               label: 'Remove stream',
