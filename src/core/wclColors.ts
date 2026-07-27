@@ -17,6 +17,16 @@ export const WCL_TIER_COLORS = {
 export type WclTier = keyof typeof WCL_TIER_COLORS
 
 /**
+ * Kills get their own colour, outside the tier scale.
+ *
+ * A kill is a different kind of result, not the best wipe — grading it on the
+ * same scale invites reading it as "99%+ damage done" rather than "done". A
+ * light green reads as finished at a glance and stays clear of the neon green
+ * used for the 25–49% band.
+ */
+export const KILL_COLOR = '#90ee90'
+
+/**
  * WCL's percentile bands, which are not evenly spaced.
  *
  * The top two are deliberately narrow: orange starts at 95 and pink at 99,
@@ -32,20 +42,17 @@ const BANDS: [threshold: number, tier: WclTier][] = [
 ]
 
 /**
- * Grades a pull by how far it got, using WCL's bands.
+ * Grades a wipe by how far it got, using WCL's bands.
  *
- * A kill is the top tier outright. Wipes are graded on boss health removed, so
- * scanning a night's attempts shows progress the way the log itself does: a
- * purple pull was a good one, a white pull was an early reset.
+ * Scanning a night's attempts then shows progress the way the log itself does:
+ * a purple pull was a good one, a white pull was an early reset.
  */
-export function tierForPull(kill: boolean, bossPercentage?: number): WclTier {
-  if (kill) return 'astounding'
+export function tierForPull(bossPercentage?: number): WclTier {
   if (bossPercentage == null) return 'common'
-
   const progress = 100 - bossPercentage
   return BANDS.find(([threshold]) => progress >= threshold)?.[1] ?? 'common'
 }
 
 export function colorForPull(kill: boolean, bossPercentage?: number): string {
-  return WCL_TIER_COLORS[tierForPull(kill, bossPercentage)]
+  return kill ? KILL_COLOR : WCL_TIER_COLORS[tierForPull(bossPercentage)]
 }
