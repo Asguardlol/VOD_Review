@@ -417,28 +417,73 @@ select {
   padding-bottom: 10px;
 }
 
-.stream-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 0 0;
+/* ---- Guild sections ---- */
+
+.guild-section {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
 }
 
-.stream-list li {
+.guild-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 8px 6px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.guild-section h3 .menu-root {
+  margin-left: auto;
+}
+
+/* The guild in scope. Its members are the only ones that can go on screen. */
+.guild-section.active {
+  background: rgb(74 158 255 / 6%);
+}
+
+.guild-section.active h3 {
+  color: var(--accent);
+}
+
+/* Drag feedback — without it, dropping onto a section is a guess. */
+.guild-section.drop-target {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  background: rgb(74 158 255 / 10%);
+}
+
+.guild-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.guild-section li {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 2px 8px 2px 12px;
+  cursor: grab;
 }
 
-.stream-list li.watching {
+.guild-section li:active {
+  cursor: grabbing;
+}
+
+.guild-section li.watching {
   background: rgb(74 158 255 / 10%);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* Someone who didn't stream that night, or whose VOD has expired. Dimmed
-   rather than hidden — "they weren't recording" is information. */
-.stream-list li.unusable .sidebar-pov-name,
-.stream-list li.unusable .role-icon {
+/* Someone who didn't stream that night, or who is outside the selected guild.
+   Dimmed rather than hidden — "they weren't recording" is information, and a
+   name that vanishes looks like the app lost it. */
+.guild-section li.unusable .sidebar-pov-name,
+.guild-section li.unusable .role-icon {
   opacity: 0.4;
 }
 
@@ -451,6 +496,7 @@ select {
 
 .stream-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px 0;
 }

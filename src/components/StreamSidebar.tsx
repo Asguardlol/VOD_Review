@@ -1,22 +1,31 @@
 import { useState } from 'react'
-import type { StreamRole, VodStream, WowClass } from '../core/types'
+import type { StreamRole, VodGuild, VodStream, WowClass } from '../core/types'
 import { CLASS_COLORS } from '../core/classColors'
 import { DEFAULT_BROADCAST_DELAY_MS } from '../core/sync'
 import { MenuButton } from './MenuButton'
 
 interface Props {
   streams: VodStream[]
+  guilds: VodGuild[]
   watching: string[]
   maxWatching: number
   audioStreamId?: string
+  /** The guild currently in scope. Undefined means no guild selected. */
+  activeGuildId?: string
   /** Present once a report is loaded; drives the greying-out. */
   hasReport: boolean
   onToggleWatch(streamId: string): void
   onSoloWatch(streamId: string): void
   onMakeAudio(streamId: string): void
+  onSelectGuild(guildId: string | undefined): void
   onAdd(draft: StreamDraft): void
   onEdit(stream: VodStream, draft: StreamDraft): void
   onRemove(streamId: string): void
+  onDuplicate(stream: VodStream): void
+  onMoveToGuild(streamId: string, guildId: string | undefined): void
+  onAddGuild(): void
+  onRenameGuild(guild: VodGuild): void
+  onRemoveGuild(guildId: string): void
   onImport(file: File): void
   onExport(): void
 }
@@ -59,102 +68,229 @@ const CLASSES: WowClass[] = [
   'warrior',
 ]
 
+const DRAG_TYPE = 'application/x-vod-stream-id'
+
 /**
- * The stream list, and the form for adding one.
+ * The stream list, grouped into guilds.
  *
- * A stream is a person and their channel, not a video: type a name once and the
- * app finds whichever VOD covers the report. Streams with no usable VOD are
- * greyed rather than hidden — "they didn't stream that night" is information
- * worth showing, and hiding them would look like the app lost them.
+ * A guild is a selection scope, not just a label: picking one restricts what
+ * can go on screen to its members. That is what keeps a twenty-person night
+ * navigable — you choose a group, then choose people within it, instead of
+ * hunting through one flat list.
+ *
+ * People are assigned by dragging them between sections. Someone who should
+ * appear both inside a guild and on their own can be duplicated first.
  */
 export function StreamSidebar({
   streams,
+  guilds,
   watching,
   maxWatching,
   audioStreamId,
+  activeGuildId,
   hasReport,
   onToggleWatch,
   onSoloWatch,
   onMakeAudio,
+  onSelectGuild,
   onAdd,
   onEdit,
   onRemove,
+  onDuplicate,
+  onMoveToGuild,
+  onAddGuild,
+  onRenameGuild,
+  onRemoveGuild,
   onImport,
   onExport,
 }: Props) {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<VodStream | undefined>()
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+
   const atCapacity = watching.length >= maxWatching
+  const ungrouped = streams.filter((s) => !s.guildId)
+
+  const renderStream = (stream: VodStream) => {
+    const usable = !!stream.resolved || stream.source.kind === 'video'
+    const isWatching = watching.includes(stream.id)
+    // A selected guild scopes what can be watched. Anyone outside it is out of
+    // play until the guild is deselected.
+    const inScope = activeGuildId === undefined || stream.guildId === activeGuildId
+    const selectable = usable && inScope
+
+    return (
+      <li
+        key={stream.id}
+        className={`${isWatching ? 'watching ' : ''}${selectable ? '' : 'unusable'}`}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(DRAG_TYPE, stream.id)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={isWatching}
+          // Capacity blocks adding, never removing — otherwise you hit the limit
+          // and can no longer uncheck anything.
+          disabled={(!isWatching && atCapacity) || !selectable}
+          title={
+            !usable
+              ? describeUnusable(stream, hasReport)
+              : !inScope
+                ? 'A guild is selected — only its members can be watched.'
+                : !isWatching && atCapacity
+                  ? `Already watching ${maxWatching}. Uncheck one first.`
+                  : isWatching
+                    ? 'Stop watching'
+                    : 'Watch alongside'
+          }
+          onChange={() => onToggleWatch(stream.id)}
+        />
+
+        <span
+          className="role-icon"
+          style={{ color: stream.wowClass ? CLASS_COLORS[stream.wowClass] : undefined }}
+          title={stream.role ? ROLE_LABELS[stream.role] : 'No role set'}
+        >
+          {stream.role ? ROLE_GLYPHS[stream.role] : '●'}
+        </span>
+
+        <button
+          className="sidebar-pov-name"
+          title={selectable ? 'Show only this stream' : describeUnusable(stream, hasReport)}
+          onClick={() => selectable && onSoloWatch(stream.id)}
+        >
+          {stream.label}
+          {audioStreamId === stream.id && <span className="dim"> 🔊</span>}
+        </button>
+
+        <MenuButton
+          actions={[
+            {
+              label:
+                audioStreamId === stream.id
+                  ? 'Already the audible stream'
+                  : 'Listen to this stream',
+              onSelect: () => onMakeAudio(stream.id),
+              disabled: audioStreamId === stream.id || !selectable,
+            },
+            { label: 'Edit…', onSelect: () => setEditing(stream) },
+            {
+              // Lets one person sit inside a guild and also stand alone — drag
+              // the copy where you want it.
+              label: 'Duplicate',
+              onSelect: () => onDuplicate(stream),
+            },
+            ...(stream.guildId
+              ? [
+                  {
+                    label: 'Remove from guild',
+                    onSelect: () => onMoveToGuild(stream.id, undefined),
+                  },
+                ]
+              : []),
+            {
+              label: 'Delete stream',
+              destructive: true,
+              confirm: `Remove "${stream.label}" from this session?`,
+              onSelect: () => onRemove(stream.id),
+            },
+          ]}
+        />
+      </li>
+    )
+  }
+
+  const dropProps = (guildId: string | undefined, key: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move' as const
+      setDropTarget(key)
+    },
+    onDragLeave: () => setDropTarget((t) => (t === key ? null : t)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      setDropTarget(null)
+      const id = e.dataTransfer.getData(DRAG_TYPE)
+      if (id) onMoveToGuild(id, guildId)
+    },
+  })
 
   return (
     <div className="stream-panel">
-      <ul className="stream-list">
-        {streams.map((stream) => {
-          const usable = !!stream.resolved || stream.source.kind === 'video'
-          const isWatching = watching.includes(stream.id)
-          return (
-            <li
-              key={stream.id}
-              className={`${isWatching ? 'watching ' : ''}${usable ? '' : 'unusable'}`}
-            >
+      {guilds.map((guild) => {
+        const members = streams.filter((s) => s.guildId === guild.id)
+        const withVod = members.filter((s) => s.resolved || s.source.kind === 'video')
+        const active = activeGuildId === guild.id
+        return (
+          <section
+            key={guild.id}
+            className={`guild-section${active ? ' active' : ''}${
+              dropTarget === guild.id ? ' drop-target' : ''
+            }`}
+            {...dropProps(guild.id, guild.id)}
+          >
+            <h3>
               <input
                 type="checkbox"
-                checked={isWatching}
-                // Capacity blocks adding, never removing — otherwise you hit the
-                // limit and can no longer uncheck anything.
-                disabled={(!isWatching && atCapacity) || !usable}
-                title={
-                  !usable
-                    ? describeUnusable(stream, hasReport)
-                    : !isWatching && atCapacity
-                      ? `Already watching ${maxWatching}. Uncheck one first.`
-                      : isWatching
-                        ? 'Stop watching'
-                        : 'Watch alongside'
-                }
-                onChange={() => onToggleWatch(stream.id)}
+                checked={active}
+                // Exclusive: selecting a guild is choosing a scope, and two
+                // scopes at once has no meaning.
+                onChange={() => onSelectGuild(active ? undefined : guild.id)}
+                title={active ? 'Deselect this guild' : 'Watch only this guild'}
               />
-
               <span
-                className="role-icon"
-                style={{ color: stream.wowClass ? CLASS_COLORS[stream.wowClass] : undefined }}
-                title={stream.role ? ROLE_LABELS[stream.role] : 'No role set'}
-              >
-                {stream.role ? ROLE_GLYPHS[stream.role] : '●'}
+                className="guild-swatch"
+                style={guild.color ? { background: guild.color } : undefined}
+              />
+              {guild.name}
+              <span className="dim" title="Members with a VOD covering this report">
+                {' '}
+                ({withVod.length}/{members.length})
               </span>
-
-              <button
-                className="sidebar-pov-name"
-                title={usable ? 'Show only this stream' : describeUnusable(stream, hasReport)}
-                onClick={() => usable && onSoloWatch(stream.id)}
-              >
-                {stream.label}
-                {audioStreamId === stream.id && <span className="dim"> 🔊</span>}
-              </button>
-
               <MenuButton
                 actions={[
+                  { label: 'Rename guild…', onSelect: () => onRenameGuild(guild) },
                   {
-                    label:
-                      audioStreamId === stream.id
-                        ? 'Already the audible stream'
-                        : 'Listen to this stream',
-                    onSelect: () => onMakeAudio(stream.id),
-                    disabled: audioStreamId === stream.id || !usable,
-                  },
-                  { label: 'Edit…', onSelect: () => setEditing(stream) },
-                  {
-                    label: 'Remove stream',
+                    label: 'Delete guild',
                     destructive: true,
-                    confirm: `Remove "${stream.label}" from this session?`,
-                    onSelect: () => onRemove(stream.id),
+                    // Deleting a group must never destroy footage. Members fall
+                    // back to ungrouped, which is recoverable; losing them isn't.
+                    confirm: `Delete guild "${guild.name}"? Its ${members.length} member${
+                      members.length === 1 ? '' : 's'
+                    } move to Ungrouped, they are not deleted.`,
+                    onSelect: () => onRemoveGuild(guild.id),
                   },
                 ]}
               />
-            </li>
-          )
-        })}
-      </ul>
+            </h3>
+            {members.length === 0 ? (
+              <p className="sidebar-empty dim">Drag people here</p>
+            ) : (
+              <ul>{members.map(renderStream)}</ul>
+            )}
+          </section>
+        )
+      })}
+
+      <section
+        className={`guild-section${dropTarget === '__none__' ? ' drop-target' : ''}`}
+        {...dropProps(undefined, '__none__')}
+      >
+        {guilds.length > 0 && (
+          <h3>
+            Ungrouped<span className="dim"> ({ungrouped.length})</span>
+          </h3>
+        )}
+        {ungrouped.length === 0 ? (
+          guilds.length > 0 && <p className="sidebar-empty dim">Drag people here</p>
+        ) : (
+          <ul>{ungrouped.map(renderStream)}</ul>
+        )}
+      </section>
 
       {(adding || editing) && (
         <StreamForm
@@ -177,6 +313,7 @@ export function StreamSidebar({
           <button className="primary" onClick={() => setAdding(true)}>
             + New stream
           </button>
+          <button onClick={onAddGuild}>+ Guild</button>
           <label className="import-button">
             Import
             <input
@@ -204,8 +341,10 @@ function describeUnusable(stream: VodStream, hasReport: boolean): string {
     case 'channel-not-found':
       return 'No Twitch channel by that name.'
     case 'no-vod-in-range':
-      return "This channel has no VOD covering the report's time range — they " +
+      return (
+        "This channel has no VOD covering the report's time range — they " +
         'either did not stream, or the VOD has since expired.'
+      )
     case 'vod-expired':
       return 'The VOD expired. Plain Twitch VODs last ~14 days (60 for Partners).'
     default:

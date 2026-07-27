@@ -56,6 +56,20 @@ export type StreamSource =
 export type StreamRole = 'tank' | 'healer' | 'mdps' | 'rdps'
 
 /**
+ * A guild/team grouping for streams.
+ *
+ * The reason this exists: a review holds far more angles than can play at once,
+ * and grouping is what keeps a large one navigable. Selecting a guild scopes
+ * what you can watch to its members, so you pick a guild and then pick people
+ * within it rather than hunting through one flat list of twenty names.
+ */
+export interface VodGuild {
+  id: string
+  name: string
+  color?: string
+}
+
+/**
  * One person's stream for the night.
  */
 export interface VodStream {
@@ -66,6 +80,8 @@ export interface VodStream {
   role?: StreamRole
   /** Drives the icon colour. */
   wowClass?: WowClass
+  /** Which guild this person is in. Absent means ungrouped. */
+  guildId?: string
   /**
    * Broadcast delay in milliseconds: how far this stream's video lags the real
    * events in the log. Twitch's default is around 4 seconds, which is why that
@@ -196,6 +212,7 @@ export interface VodSession {
   title: string
   report?: SessionReport
   streams: VodStream[]
+  guilds: VodGuild[]
   /** Which pull is loaded. Fight ids are per-report, so this pairs with report. */
   selectedFightId?: number
   /** Deaths for the selected pull only, refetched on selection. */

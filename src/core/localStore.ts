@@ -90,6 +90,7 @@ export class LocalSessionStore implements SessionStore {
       id: newId(),
       title: 'Untitled night',
       streams: [],
+      guilds: [],
       deaths: [],
       events: [],
       markers: [],

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionStore } from '../core/storage'
-import type { VodFight, VodStream } from '../core/types'
+import type { VodFight, VodGuild, VodStream } from '../core/types'
 import { useSession } from '../hooks/useSession'
 import { useTimeline } from '../hooks/useTimeline'
 import { newId } from '../core/ids'
@@ -50,6 +50,11 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   const twitchClient = useMemo(() => createTwitchClient(), [])
 
   const [watching, setWatching] = useState<string[]>([])
+  /**
+   * The guild in scope, if any. View state like `watching` — it is about what
+   * you are looking at now, not a property of the night.
+   */
+  const [activeGuildId, setActiveGuildId] = useState<string | undefined>()
   const [reportInput, setReportInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
@@ -305,6 +310,63 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
     }))
   }
 
+  /**
+   * Selecting a guild scopes what can be watched to its members, so anyone
+   * already on screen from outside it has to come off — otherwise the rule the
+   * checkboxes enforce would be contradicted by what is actually playing.
+   */
+  const selectGuild = (guildId: string | undefined) => {
+    setActiveGuildId(guildId)
+    if (!guildId) return
+    setWatching((current) =>
+      current.filter((id) => session.streams.find((s) => s.id === id)?.guildId === guildId),
+    )
+  }
+
+  const duplicateStream = (stream: VodStream) => {
+    // The copy lands ungrouped so it can be dragged wherever it is wanted, and
+    // keeps its resolved VOD so it does not need looking up again.
+    const copy: VodStream = { ...stream, id: newId(), guildId: undefined }
+    update((s) => ({ ...s, streams: [...s.streams, copy] }))
+  }
+
+  const moveToGuild = (streamId: string, guildId: string | undefined) => {
+    update((s) => ({
+      ...s,
+      streams: s.streams.map((x) => (x.id === streamId ? { ...x, guildId } : x)),
+    }))
+    // Dragging someone out of the guild in scope also takes them off screen.
+    if (activeGuildId !== undefined && guildId !== activeGuildId) {
+      setWatching((current) => current.filter((id) => id !== streamId))
+    }
+  }
+
+  const addGuild = () => {
+    const name = window.prompt('Guild or team name')
+    if (!name?.trim()) return
+    update((s) => ({ ...s, guilds: [...s.guilds, { id: newId(), name: name.trim() }] }))
+  }
+
+  const renameGuild = (guild: VodGuild) => {
+    const next = window.prompt('Guild name', guild.name)
+    if (!next?.trim()) return
+    update((s) => ({
+      ...s,
+      guilds: s.guilds.map((g) => (g.id === guild.id ? { ...g, name: next.trim() } : g)),
+    }))
+  }
+
+  const removeGuild = (guildId: string) => {
+    update((s) => ({
+      ...s,
+      guilds: s.guilds.filter((g) => g.id !== guildId),
+      // Orphaned members become ungrouped. Deleting a guild is organisational;
+      // it must never destroy footage.
+      streams: s.streams.map((x) => (x.guildId === guildId ? { ...x, guildId: undefined } : x)),
+    }))
+    if (activeGuildId === guildId) setActiveGuildId(undefined)
+  }
+
   const removeStream = (streamId: string) => {
     update((s) => {
       const streams = s.streams.filter((x) => x.id !== streamId)
@@ -418,9 +480,11 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
         <aside className="pov-sidebar">
           <StreamSidebar
             streams={session.streams}
+            guilds={session.guilds}
             watching={watching}
             maxWatching={MAX_WATCHING}
             audioStreamId={session.audioStreamId}
+            activeGuildId={activeGuildId}
             hasReport={!!session.report}
             onToggleWatch={(id) =>
               setWatching((current) =>
@@ -433,6 +497,12 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
             }
             onSoloWatch={(id) => setWatching([id])}
             onMakeAudio={setAudio}
+            onSelectGuild={selectGuild}
+            onDuplicate={duplicateStream}
+            onMoveToGuild={moveToGuild}
+            onAddGuild={addGuild}
+            onRenameGuild={renameGuild}
+            onRemoveGuild={removeGuild}
             onAdd={(draft) => void addStream(draft)}
             onEdit={editStream}
             onRemove={removeStream}

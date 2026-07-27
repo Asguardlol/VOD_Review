@@ -14,6 +14,7 @@ export function normalizeSession(raw: VodSession): VodSession {
     ...raw,
     title: raw.title ?? 'Untitled night',
     streams: raw.streams ?? [],
+    guilds: raw.guilds ?? [],
     deaths: raw.deaths ?? [],
     events: raw.events ?? [],
     markers: raw.markers ?? [],
