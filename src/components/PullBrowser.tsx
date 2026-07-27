@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { SessionReport, VodFight } from '../core/types'
 import { formatAge, formatClock, formatTime } from '../core/format'
+import { colorForPull } from '../core/wclColors'
 
 interface Props {
   report: SessionReport
@@ -134,7 +135,9 @@ function PullTile({
       ? Math.min(100, Math.max(0, 100 - fight.bossPercentage))
       : 0
 
-  const tone = fight.kill ? 'kill' : progress >= 30 ? 'close' : 'wipe'
+  // Warcraft Logs' own tier colours, so a pull reads the same here as it does
+  // in the log — no second colour language to learn.
+  const color = colorForPull(!!fight.kill, fight.bossPercentage)
 
   return (
     <button
@@ -149,12 +152,17 @@ function PullTile({
       }
     >
       <span className="pull-line">
-        <span className={`pull-number ${tone}`}>{fight.pullNumber}</span>
+        <span className="pull-number" style={{ color }}>
+          {fight.pullNumber}
+        </span>
         <span className="pull-duration">({formatTime(fight.durationMs)})</span>
         <span className="pull-clock">{formatClock(fight.startedAt)}</span>
       </span>
       <span className="pull-bar">
-        <span className={`pull-bar-fill ${tone}`} style={{ width: `${progress}%` }} />
+        <span
+          className="pull-bar-fill"
+          style={{ width: `${progress}%`, background: color }}
+        />
       </span>
     </button>
   )

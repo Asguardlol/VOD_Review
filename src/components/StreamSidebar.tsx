@@ -13,6 +13,7 @@ interface Props {
   hasReport: boolean
   onToggleWatch(streamId: string): void
   onSoloWatch(streamId: string): void
+  onMakeAudio(streamId: string): void
   onAdd(draft: StreamDraft): void
   onEdit(stream: VodStream, draft: StreamDraft): void
   onRemove(streamId: string): void
@@ -74,6 +75,7 @@ export function StreamSidebar({
   hasReport,
   onToggleWatch,
   onSoloWatch,
+  onMakeAudio,
   onAdd,
   onEdit,
   onRemove,
@@ -132,6 +134,14 @@ export function StreamSidebar({
 
               <MenuButton
                 actions={[
+                  {
+                    label:
+                      audioStreamId === stream.id
+                        ? 'Already the audible stream'
+                        : 'Listen to this stream',
+                    onSelect: () => onMakeAudio(stream.id),
+                    disabled: audioStreamId === stream.id || !usable,
+                  },
                   { label: 'Edit…', onSelect: () => setEditing(stream) },
                   {
                     label: 'Remove stream',

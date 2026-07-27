@@ -87,6 +87,23 @@ export function TransportBar({
           </span>
         </span>
 
+        {/*
+          Volume for whichever stream is currently the audible one. Previously
+          the only way to affect volume was picking the audio stream, which
+          jumped straight to full — loud and with no way back.
+        */}
+        <label className="volume" title="Volume of the audible stream">
+          <span aria-hidden="true">🔊</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(engine.volume * 100)}
+            aria-label="Volume"
+            onChange={(e) => engine.setVolume(Number(e.target.value) / 100)}
+          />
+        </label>
+
         <button onClick={onAddMarker} title="Bookmark this moment">
           + Marker
         </button>

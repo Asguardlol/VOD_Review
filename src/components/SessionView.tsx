@@ -417,6 +417,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
               )
             }
             onSoloWatch={(id) => setWatching([id])}
+            onMakeAudio={setAudio}
             onAdd={(draft) => void addStream(draft)}
             onEdit={editStream}
             onRemove={removeStream}

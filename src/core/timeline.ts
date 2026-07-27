@@ -19,8 +19,16 @@ import type { PovPlayer } from '../players/types'
  * measures every player against the reference and pulls stragglers back.
  */
 
-/** Beyond this, a hard seek. Visible jump, but being wrong is worse. */
-const DRIFT_SEEK_THRESHOLD_S = 0.5
+/**
+ * Beyond this, a hard seek.
+ *
+ * Deliberately large. A seek on Twitch is disruptive — it re-buffers and can
+ * land hundreds of milliseconds off, so correcting a small drift often creates
+ * a bigger one. Below this threshold, leaving the player alone genuinely beats
+ * touching it, and the user has a per-stream delay control for anything that
+ * stays consistently off.
+ */
+const DRIFT_SEEK_THRESHOLD_S = 2
 /**
  * Beyond this but under the seek threshold, correct by briefly changing
  * playback rate — invisible where it's supported. YouTube only; Twitch's embed
@@ -37,14 +45,6 @@ const TICK_MS = 400
  * this window would read the pre-seek position and fight itself.
  */
 const SEEK_SETTLE_MS = 1200
-
-/**
- * Consecutive buffering ticks before everyone is held.
- *
- * Pausing four players is disruptive enough that it should take more than one
- * sample to trigger — a lone tick of no progress is usually a hiccup.
- */
-const STALL_TICKS_TO_HOLD = 2
 
 interface Registered {
   player: PovPlayer
@@ -70,12 +70,13 @@ export class TimelineEngine {
   #stalled = false
   #stalledPovIds: string[] = []
   /** Set when a stall paused playback, so it can resume once everyone recovers. */
-  #resumeAfterStall = false
-  /** Consecutive ticks seen buffering, for the hysteresis below. */
-  #stallTicks = 0
   #suppressCorrectionUntil = 0
   #audioPovId: string | undefined
-  #volume = 1
+  /**
+   * Starts below maximum. Selecting which stream to listen to should not also
+   * be a decision to play it as loud as possible.
+   */
+  #volume = 0.6
   #tick: number | undefined
   #onChange: () => void
 
@@ -162,10 +163,15 @@ export class TimelineEngine {
     this.#onChange()
   }
 
+  get volume(): number {
+    return this.#volume
+  }
+
   setVolume(volume01: number): void {
     this.#volume = Math.min(1, Math.max(0, volume01))
     if (!this.#audioPovId) return
     this.#players.get(this.#audioPovId)?.player.setVolume(this.#volume)
+    this.#onChange()
   }
 
   /**
@@ -179,7 +185,6 @@ export class TimelineEngine {
   play(): void {
     if (this.#playing) return
     this.#playing = true
-    this.#resumeAfterStall = false
     for (const { player } of this.#players.values()) player.play()
     this.#onChange()
   }
@@ -187,7 +192,6 @@ export class TimelineEngine {
   pause(): void {
     if (!this.#playing) return
     this.#playing = false
-    this.#resumeAfterStall = false
     for (const { player } of this.#players.values()) player.pause()
     this.#onChange()
   }
@@ -249,58 +253,31 @@ export class TimelineEngine {
   #onTick(): void {
     if (this.#players.size === 0) return
 
-    /*
-     * Stall handling is suspended right after any seek.
-     *
-     * A seeking player legitimately stops reporting progress, and on Twitch
-     * "stalled" is *inferred* from exactly that. Without this window the
-     * sequence self-perpetuates: resume, seek, the seek reads as a stall,
-     * pause everyone, unstall, resume, seek — playback visibly strobes.
-     */
     const settling = performance.now() < this.#suppressCorrectionUntil
 
+    /*
+     * Buffering is *reported*, never acted on.
+     *
+     * Pausing every player when one stalled was the original design, and it
+     * had to go. Twitch exposes no buffering state, so it is inferred from
+     * "the clock did not advance" — but Twitch's clock updates coarsely, so a
+     * perfectly healthy stream reads as stalled a good fraction of the time.
+     * Acting on that flag paused and resumed everything continuously, which is
+     * far worse than the drift it was meant to prevent. Hysteresis cannot
+     * rescue a signal that is wrong rather than noisy.
+     *
+     * Drift correction already handles a player that falls behind, which is
+     * the actual consequence of a stall. So this now only drives the
+     * "Buffering" badge.
+     */
     const stalledIds: string[] = []
     if (!settling) {
       for (const [id, entry] of this.#players) {
         if (entry.player.isBuffering()) stalledIds.push(id)
       }
     }
-
-    // One POV buffering means every other POV is running ahead of it. Holding
-    // everyone is the only way the angles stay comparable. Requiring two
-    // consecutive ticks first, because a single tick of "no progress" is far
-    // more often a scheduling hiccup than a real stall, and pausing every
-    // player for it is worse than the drift it prevents.
-    if (stalledIds.length > 0 && this.#playing) {
-      this.#stallTicks += 1
-      if (this.#stallTicks >= STALL_TICKS_TO_HOLD) {
-        this.#stalled = true
-        this.#stalledPovIds = stalledIds
-        this.#resumeAfterStall = true
-        this.#playing = false
-        for (const { player } of this.#players.values()) player.pause()
-        this.#onChange()
-      }
-      return
-    }
-
-    this.#stallTicks = 0
-
-    if (stalledIds.length === 0 && this.#stalled && !settling) {
-      this.#stalled = false
-      this.#stalledPovIds = []
-      if (this.#resumeAfterStall) {
-        this.#resumeAfterStall = false
-        // Resume without seeking. Re-aligning here is what caused the strobe,
-        // and it is unnecessary: ordinary drift correction pulls the laggard
-        // back within a tick or two, gently and without another stall.
-        this.#playing = true
-        for (const { player } of this.#players.values()) player.play()
-        this.#suppressCorrectionUntil = performance.now() + SEEK_SETTLE_MS
-      }
-      this.#onChange()
-      return
-    }
+    this.#stalled = stalledIds.length > 0
+    this.#stalledPovIds = stalledIds
 
     const reference = this.#reference()
     if (!reference) return

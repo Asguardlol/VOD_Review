@@ -584,20 +584,9 @@ button.primary {
   white-space: nowrap;
 }
 
+/* Colour comes from Warcraft Logs' tier scale, set inline per pull. */
 .pull-number {
   font-weight: 700;
-}
-
-.pull-number.kill {
-  color: var(--kill);
-}
-
-.pull-number.close {
-  color: var(--warn);
-}
-
-.pull-number.wipe {
-  color: var(--danger);
 }
 
 .pull-duration {
@@ -625,16 +614,18 @@ button.primary {
   height: 100%;
 }
 
-.pull-bar-fill.kill {
-  background: var(--kill);
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
 }
 
-.pull-bar-fill.close {
-  background: var(--warn);
-}
-
-.pull-bar-fill.wipe {
-  background: var(--danger);
+.volume input[type='range'] {
+  width: 80px;
+  padding: 0;
+  border: none;
+  background: none;
 }
 
 /* ---- Warcraft Logs panel ---- */

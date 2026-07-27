@@ -101,16 +101,14 @@ export function StreamTile({
   return (
     <div className={`pov-tile${isAudio ? ' is-audio' : ''}${isStalled ? ' is-stalled' : ''}`}>
       <div className="pov-header">
-        <button
-          className={`audio-toggle${isAudio ? ' active' : ''}`}
-          title={isAudio ? 'This stream is audible' : 'Listen to this stream'}
-          onClick={onMakeAudio}
-          disabled={!!error}
-        >
-          {isAudio ? '🔊' : '🔇'}
-        </button>
-
+        {/*
+          Which stream is audible is chosen from the sidebar, not from a control
+          on the tile. Volume lives on the transport with the other playback
+          controls; a speaker icon here read as a volume button and behaved like
+          a source selector, which is the worst of both.
+        */}
         <span className="pov-label" title={vod.title ?? stream.label}>
+          {isAudio && <span className="dim">🔊 </span>}
           {stream.label}
         </span>
 
@@ -144,6 +142,11 @@ export function StreamTile({
 
         <MenuButton
           actions={[
+            {
+              label: isAudio ? 'Already the audible stream' : 'Listen to this stream',
+              onSelect: onMakeAudio,
+              disabled: isAudio || !!error,
+            },
             { label: 'Edit stream…', onSelect: onEdit },
             {
               label: 'Remove stream',
