@@ -10,14 +10,13 @@ interface Props {
   watching: string[]
   maxWatching: number
   audioStreamId?: string
-  /** The guild currently in scope. Undefined means no guild selected. */
-  activeGuildId?: string
   /** Present once a report is loaded; drives the greying-out. */
   hasReport: boolean
   onToggleWatch(streamId: string): void
   onSoloWatch(streamId: string): void
   onMakeAudio(streamId: string): void
-  onSelectGuild(guildId: string | undefined): void
+  /** Puts the whole guild on screen, or takes it off. */
+  onToggleGuildWatch(guildId: string): void
   onAdd(draft: StreamDraft): void
   onEdit(stream: VodStream, draft: StreamDraft): void
   onRemove(streamId: string): void
@@ -73,10 +72,14 @@ const DRAG_TYPE = 'application/x-vod-stream-id'
 /**
  * The stream list, grouped into guilds.
  *
- * A guild is a selection scope, not just a label: picking one restricts what
- * can go on screen to its members. That is what keeps a twenty-person night
- * navigable — you choose a group, then choose people within it, instead of
- * hunting through one flat list.
+ * A guild behaves as one entity that happens to contain several people:
+ * ticking it puts its members on screen, unticking takes them off. It is not a
+ * filter and it is not exclusive — individuals inside or outside any guild can
+ * still be picked freely, and the only limit is the overall cap on how many
+ * play at once.
+ *
+ * Sections start collapsed. A raid night is a lot of names, and the point of
+ * grouping is to make that list short enough to scan.
  *
  * People are assigned by dragging them between sections. Someone who should
  * appear both inside a guild and on their own can be duplicated first.
@@ -87,12 +90,11 @@ export function StreamSidebar({
   watching,
   maxWatching,
   audioStreamId,
-  activeGuildId,
   hasReport,
   onToggleWatch,
   onSoloWatch,
   onMakeAudio,
-  onSelectGuild,
+  onToggleGuildWatch,
   onAdd,
   onEdit,
   onRemove,
@@ -107,17 +109,26 @@ export function StreamSidebar({
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<VodStream | undefined>()
   const [dropTarget, setDropTarget] = useState<string | null>(null)
+  /**
+   * Tracks what is *open* rather than what is closed, so guilds created later
+   * start collapsed too without anyone having to remember to add them.
+   */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const atCapacity = watching.length >= maxWatching
   const ungrouped = streams.filter((s) => !s.guildId)
 
+  const toggleExpanded = (guildId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(guildId)) next.delete(guildId)
+      else next.add(guildId)
+      return next
+    })
+
   const renderStream = (stream: VodStream) => {
-    const usable = !!stream.resolved || stream.source.kind === 'video'
+    const selectable = !!stream.resolved || stream.source.kind === 'video'
     const isWatching = watching.includes(stream.id)
-    // A selected guild scopes what can be watched. Anyone outside it is out of
-    // play until the guild is deselected.
-    const inScope = activeGuildId === undefined || stream.guildId === activeGuildId
-    const selectable = usable && inScope
 
     return (
       <li
@@ -136,15 +147,13 @@ export function StreamSidebar({
           // and can no longer uncheck anything.
           disabled={(!isWatching && atCapacity) || !selectable}
           title={
-            !usable
+            !selectable
               ? describeUnusable(stream, hasReport)
-              : !inScope
-                ? 'A guild is selected — only its members can be watched.'
-                : !isWatching && atCapacity
-                  ? `Already watching ${maxWatching}. Uncheck one first.`
-                  : isWatching
-                    ? 'Stop watching'
-                    : 'Watch alongside'
+              : !isWatching && atCapacity
+                ? `Already watching ${maxWatching}. Uncheck one first.`
+                : isWatching
+                  ? 'Stop watching'
+                  : 'Watch alongside'
           }
           onChange={() => onToggleWatch(stream.id)}
         />
@@ -224,33 +233,55 @@ export function StreamSidebar({
       {guilds.map((guild) => {
         const members = streams.filter((s) => s.guildId === guild.id)
         const withVod = members.filter((s) => s.resolved || s.source.kind === 'video')
-        const active = activeGuildId === guild.id
+        const watchedHere = withVod.filter((s) => watching.includes(s.id))
+        const allOn = withVod.length > 0 && watchedHere.length === withVod.length
+        const someOn = watchedHere.length > 0 && !allOn
+        const isOpen = expanded.has(guild.id)
+
         return (
           <section
             key={guild.id}
-            className={`guild-section${active ? ' active' : ''}${
-              dropTarget === guild.id ? ' drop-target' : ''
-            }`}
+            className={`guild-section${dropTarget === guild.id ? ' drop-target' : ''}`}
             {...dropProps(guild.id, guild.id)}
           >
             <h3>
               <input
                 type="checkbox"
-                checked={active}
-                // Exclusive: selecting a guild is choosing a scope, and two
-                // scopes at once has no meaning.
-                onChange={() => onSelectGuild(active ? undefined : guild.id)}
-                title={active ? 'Deselect this guild' : 'Watch only this guild'}
+                checked={allOn}
+                // Partial selection is its own state: "some of this guild is up"
+                // is different from "none of it is", and a plain unchecked box
+                // would claim the latter.
+                ref={(el) => {
+                  if (el) el.indeterminate = someOn
+                }}
+                disabled={withVod.length === 0}
+                onChange={() => onToggleGuildWatch(guild.id)}
+                title={
+                  withVod.length === 0
+                    ? 'Nobody in this guild has a VOD for this report'
+                    : allOn
+                      ? 'Take this guild off screen'
+                      : `Put this guild on screen (up to ${maxWatching})`
+                }
               />
-              <span
-                className="guild-swatch"
-                style={guild.color ? { background: guild.color } : undefined}
-              />
-              {guild.name}
-              <span className="dim" title="Members with a VOD covering this report">
-                {' '}
-                ({withVod.length}/{members.length})
-              </span>
+
+              <button
+                className="guild-name"
+                onClick={() => toggleExpanded(guild.id)}
+                title={isOpen ? 'Collapse' : 'Expand'}
+              >
+                <span className="chevron">{isOpen ? '⌄' : '›'}</span>
+                <span
+                  className="guild-swatch"
+                  style={guild.color ? { background: guild.color } : undefined}
+                />
+                {guild.name}
+                <span className="dim" title="Members with a VOD covering this report">
+                  {' '}
+                  ({withVod.length}/{members.length})
+                </span>
+              </button>
+
               <MenuButton
                 actions={[
                   { label: 'Rename guild…', onSelect: () => onRenameGuild(guild) },
@@ -267,11 +298,15 @@ export function StreamSidebar({
                 ]}
               />
             </h3>
-            {members.length === 0 ? (
-              <p className="sidebar-empty dim">Drag people here</p>
-            ) : (
-              <ul>{members.map(renderStream)}</ul>
-            )}
+
+            {/* Collapsed guilds still accept drops, so assigning doesn't
+                require expanding everything first. */}
+            {isOpen &&
+              (members.length === 0 ? (
+                <p className="sidebar-empty dim">Drag people here</p>
+              ) : (
+                <ul>{members.map(renderStream)}</ul>
+              ))}
           </section>
         )
       })}

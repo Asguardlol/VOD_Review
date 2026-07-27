@@ -50,11 +50,6 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   const twitchClient = useMemo(() => createTwitchClient(), [])
 
   const [watching, setWatching] = useState<string[]>([])
-  /**
-   * The guild in scope, if any. View state like `watching` — it is about what
-   * you are looking at now, not a property of the night.
-   */
-  const [activeGuildId, setActiveGuildId] = useState<string | undefined>()
   const [reportInput, setReportInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
@@ -311,16 +306,30 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   }
 
   /**
-   * Selecting a guild scopes what can be watched to its members, so anyone
-   * already on screen from outside it has to come off — otherwise the rule the
-   * checkboxes enforce would be contradicted by what is actually playing.
+   * A guild acts as one entity: tick it and its members go on screen, untick
+   * and they come off.
+   *
+   * Not exclusive — anyone else, in another guild or none, can still be picked
+   * alongside. The only constraint is the overall cap, so a guild with more
+   * members than remaining slots fills what it can rather than refusing.
    */
-  const selectGuild = (guildId: string | undefined) => {
-    setActiveGuildId(guildId)
-    if (!guildId) return
-    setWatching((current) =>
-      current.filter((id) => session.streams.find((s) => s.id === id)?.guildId === guildId),
-    )
+  const toggleGuildWatch = (guildId: string) => {
+    const memberIds = session.streams
+      .filter((s) => s.guildId === guildId && (s.resolved || s.source.kind === 'video'))
+      .map((s) => s.id)
+    if (memberIds.length === 0) return
+
+    setWatching((current) => {
+      const allOn = memberIds.every((id) => current.includes(id))
+      if (allOn) return current.filter((id) => !memberIds.includes(id))
+
+      const next = [...current]
+      for (const id of memberIds) {
+        if (next.length >= MAX_WATCHING) break
+        if (!next.includes(id)) next.push(id)
+      }
+      return next
+    })
   }
 
   const duplicateStream = (stream: VodStream) => {
@@ -335,10 +344,6 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
       ...s,
       streams: s.streams.map((x) => (x.id === streamId ? { ...x, guildId } : x)),
     }))
-    // Dragging someone out of the guild in scope also takes them off screen.
-    if (activeGuildId !== undefined && guildId !== activeGuildId) {
-      setWatching((current) => current.filter((id) => id !== streamId))
-    }
   }
 
   const addGuild = () => {
@@ -364,7 +369,6 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
       // it must never destroy footage.
       streams: s.streams.map((x) => (x.guildId === guildId ? { ...x, guildId: undefined } : x)),
     }))
-    if (activeGuildId === guildId) setActiveGuildId(undefined)
   }
 
   const removeStream = (streamId: string) => {
@@ -484,7 +488,6 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
             watching={watching}
             maxWatching={MAX_WATCHING}
             audioStreamId={session.audioStreamId}
-            activeGuildId={activeGuildId}
             hasReport={!!session.report}
             onToggleWatch={(id) =>
               setWatching((current) =>
@@ -497,7 +500,7 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
             }
             onSoloWatch={(id) => setWatching([id])}
             onMakeAudio={setAudio}
-            onSelectGuild={selectGuild}
+            onToggleGuildWatch={toggleGuildWatch}
             onDuplicate={duplicateStream}
             onMoveToGuild={moveToGuild}
             onAddGuild={addGuild}

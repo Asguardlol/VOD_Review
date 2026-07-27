@@ -440,13 +440,31 @@ select {
   margin-left: auto;
 }
 
-/* The guild in scope. Its members are the only ones that can go on screen. */
-.guild-section.active {
-  background: rgb(74 158 255 / 6%);
+/* The whole header row is the expand/collapse target, so it needs to read as
+   clickable without looking like a button. */
+.guild-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: left;
 }
 
-.guild-section.active h3 {
-  color: var(--accent);
+.guild-name:hover {
+  color: var(--text);
+}
+
+.guild-section .chevron {
+  width: 10px;
+  flex: none;
 }
 
 /* Drag feedback — without it, dropping onto a section is a guess. */
