@@ -5,18 +5,20 @@ import { captureTwitchToken } from './twitch/auth'
 import { completeWclLogin } from './wcl/pkce'
 
 /**
- * Both OAuth callbacks are settled before React mounts.
+ * Both OAuth callbacks are settled before React mounts, and they differ in a
+ * way that matters.
  *
  * Twitch's implicit grant returns its token in the URL *fragment*, which is
- * also where this app's router lives — left alone it would look like a garbage
- * route and leave a token in the address bar. Warcraft Logs' PKCE code arrives
- * as a query parameter, so it doesn't collide, but it still has to be exchanged
- * and cleared so a refresh can't replay a spent code.
+ * also where this app's router lives — left alone it looks like a garbage route
+ * and strands a token in the address bar. It is fixed up in place, without a
+ * navigation, so rendering must continue normally afterwards.
  *
- * Either handler redirects when it fires, so rendering is skipped in that case.
+ * Warcraft Logs' PKCE code arrives as a query parameter. Clearing that is a
+ * real navigation, so this document is about to be replaced and there is no
+ * point mounting anything.
  */
 async function start() {
-  if (captureTwitchToken()) return
+  captureTwitchToken()
   if (await completeWclLogin()) return
 
   const container = document.getElementById('root')

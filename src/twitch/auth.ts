@@ -65,20 +65,28 @@ export function beginTwitchLogin(): void {
  * Must run before the router reads the hash. Twitch returns
  * `#access_token=…&token_type=bearer`, which would otherwise look like a
  * garbage route and leave the token sitting in the address bar.
+ *
+ * Rewrites the URL with `history.replaceState` rather than
+ * `location.replace`. Both scrub the token from history, but the token lives
+ * in the *fragment* — and a hash-only `location.replace` does not reload the
+ * page. Waiting for a navigation that never comes left the app unmounted and
+ * the screen blank until a manual refresh.
+ *
+ * So this fixes up the URL in place and the caller carries on rendering.
  */
-export function captureTwitchToken(): boolean {
+export function captureTwitchToken(): void {
   const hash = window.location.hash
-  if (!hash.includes('access_token=')) return false
+  if (!hash.includes('access_token=')) return
 
   const params = new URLSearchParams(hash.replace(/^#/, ''))
   const token = params.get('access_token')
   if (token) localStorage.setItem(TOKEN_KEY, token)
 
-  const returnRoute = sessionStorage.getItem(RETURN_ROUTE_KEY) ?? '#/'
+  const returnRoute = sessionStorage.getItem(RETURN_ROUTE_KEY) || '#/'
   sessionStorage.removeItem(RETURN_ROUTE_KEY)
-  // replace, not assign: the token must not survive in history.
-  window.location.replace(returnRoute || '#/')
-  return true
+
+  const { pathname, search } = window.location
+  window.history.replaceState(null, '', `${pathname}${search}${returnRoute}`)
 }
 
 /**
