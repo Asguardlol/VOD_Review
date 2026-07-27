@@ -85,8 +85,14 @@ export async function createTwitchPlayer(
       }
       return
     }
-    // Position frozen while nominally playing for over half a second: stalled.
-    if (!buffering && performance.now() - lastTimeAt > 500) {
+    /*
+     * Twitch's clock updates coarsely — often only once a second or so — which
+     * means a healthy stream regularly looks frozen for several hundred
+     * milliseconds. A short threshold here reported near-constant buffering.
+     * Two seconds is long enough to clear that granularity and still catch a
+     * real stall.
+     */
+    if (!buffering && performance.now() - lastTimeAt > 2000) {
       buffering = true
       callbacks.onStateChange?.()
     }

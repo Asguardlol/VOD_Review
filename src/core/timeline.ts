@@ -46,7 +46,14 @@ const TICK_MS = 400
  */
 const SEEK_SETTLE_MS = 1200
 
+/** Consecutive buffering ticks before the UI says so. ~1.2s at the tick rate. */
+const STALL_TICKS_TO_REPORT = 3
+
+/** Grace after an explicit play/pause, before believing what players report. */
+const COMMAND_SETTLE_MS = 800
+
 interface Registered {
+  id: string
   player: PovPlayer
   offsetMs: number
   /** True while a rate nudge is active, so it can be released afterwards. */
@@ -70,6 +77,8 @@ export class TimelineEngine {
   #stalled = false
   #stalledPovIds: string[] = []
   /** Set when a stall paused playback, so it can resume once everyone recovers. */
+  /** Consecutive ticks seen buffering, for the reporting threshold. */
+  #stallTicks = 0
   #suppressCorrectionUntil = 0
   #audioPovId: string | undefined
   /**
@@ -118,7 +127,7 @@ export class TimelineEngine {
     offsetMs: number,
     supportsRate: boolean,
   ): void {
-    this.#players.set(povId, { player, offsetMs, nudging: false, supportsRate })
+    this.#players.set(povId, { id: povId, player, offsetMs, nudging: false, supportsRate })
     player.setMuted(povId !== this.#audioPovId)
     if (povId === this.#audioPovId) player.setVolume(this.#volume)
     // Bring a late arrival to wherever everyone else already is.
@@ -186,6 +195,9 @@ export class TimelineEngine {
     if (this.#playing) return
     this.#playing = true
     for (const { player } of this.#players.values()) player.play()
+    // Players take a moment to report the new state. Without this grace period
+    // the next tick reads the stale value and immediately undoes the command.
+    this.#suppressCorrectionUntil = performance.now() + COMMAND_SETTLE_MS
     this.#onChange()
   }
 
@@ -193,6 +205,7 @@ export class TimelineEngine {
     if (!this.#playing) return
     this.#playing = false
     for (const { player } of this.#players.values()) player.pause()
+    this.#suppressCorrectionUntil = performance.now() + COMMAND_SETTLE_MS
     this.#onChange()
   }
 
@@ -276,11 +289,42 @@ export class TimelineEngine {
         if (entry.player.isBuffering()) stalledIds.push(id)
       }
     }
-    this.#stalled = stalledIds.length > 0
-    this.#stalledPovIds = stalledIds
+
+    /*
+     * Even as a display-only signal this needs holding down. Twitch's is
+     * inferred and still flickers, and a badge that blinks on and off is worse
+     * than no badge — it reads as the app malfunctioning rather than as the
+     * stream being slow. Only sustained buffering is worth telling anyone about.
+     */
+    this.#stallTicks = stalledIds.length > 0 ? this.#stallTicks + 1 : 0
+    const sustained = this.#stallTicks >= STALL_TICKS_TO_REPORT
+    this.#stalled = sustained
+    this.#stalledPovIds = sustained ? stalledIds : []
 
     const reference = this.#reference()
     if (!reference) return
+
+    /*
+     * Adopt the reference player's real state rather than trusting our own flag.
+     *
+     * Twitch renders its own controls inside the iframe, so playback can be
+     * started or stopped without going through this engine at all. Left
+     * one-directional, our transport would claim "paused" over a playing video.
+     *
+     * Bringing the others along is the point: hitting play on one embed should
+     * mean the whole review plays, not one angle running away from the rest.
+     */
+    if (!settling) {
+      const referencePlaying = reference.player.isPlaying()
+      if (referencePlaying !== this.#playing) {
+        this.#playing = referencePlaying
+        for (const entry of this.#players.values()) {
+          if (entry.id === reference.id) continue
+          if (referencePlaying) entry.player.play()
+          else entry.player.pause()
+        }
+      }
+    }
 
     // Timeline position is read back from a real player rather than a wall
     // clock. The wall clock would keep counting through stalls and seeks and
