@@ -394,6 +394,12 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
       </header>
 
       <div className="review-body">
+        {/*
+          The sidebar is a column with one growing section: the stream list and
+          connection panels keep their natural height, and the pull browser
+          takes the rest and scrolls on its own. A raid night is dozens of
+          pulls, so it has to scroll without dragging the whole page with it.
+        */}
         <aside className="pov-sidebar">
           <StreamSidebar
             streams={session.streams}
@@ -502,29 +508,6 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
         </aside>
 
         <main className="review-main">
-          {selectedFight && (
-            <TransportBar
-              engine={engine}
-              state={state}
-              markers={session.markers}
-              deaths={session.deaths}
-              durationMs={selectedFight.durationMs}
-              boundedByFight
-              onAddMarker={() => {
-                const label = window.prompt('Label for this moment')
-                if (!label?.trim()) return
-                update((s) => ({
-                  ...s,
-                  markers: [
-                    ...s.markers,
-                    { id: newId(), atMs: Math.round(state.positionMs), label: label.trim() },
-                  ],
-                }))
-              }}
-              onSeekMarker={(m) => engine.seekTo(m.atMs)}
-            />
-          )}
-
           {!session.report ? (
             <p className="empty">
               Paste a Warcraft Logs report to see the night's pulls, and add the
@@ -586,6 +569,34 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
                 )
               })}
             </div>
+          )}
+
+          {/*
+            Transport sits under the video, the way every video tool puts it —
+            it is a control for the thing above it, and having it above pushed
+            the players down the page for no reason.
+          */}
+          {selectedFight && (
+            <TransportBar
+              engine={engine}
+              state={state}
+              markers={session.markers}
+              deaths={session.deaths}
+              durationMs={selectedFight.durationMs}
+              boundedByFight
+              onAddMarker={() => {
+                const label = window.prompt('Label for this moment')
+                if (!label?.trim()) return
+                update((s) => ({
+                  ...s,
+                  markers: [
+                    ...s.markers,
+                    { id: newId(), atMs: Math.round(state.positionMs), label: label.trim() },
+                  ],
+                }))
+              }}
+              onSeekMarker={(m) => engine.seekTo(m.atMs)}
+            />
           )}
         </main>
       </div>

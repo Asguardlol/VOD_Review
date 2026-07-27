@@ -38,6 +38,14 @@ const TICK_MS = 400
  */
 const SEEK_SETTLE_MS = 1200
 
+/**
+ * Consecutive buffering ticks before everyone is held.
+ *
+ * Pausing four players is disruptive enough that it should take more than one
+ * sample to trigger — a lone tick of no progress is usually a hiccup.
+ */
+const STALL_TICKS_TO_HOLD = 2
+
 interface Registered {
   player: PovPlayer
   offsetMs: number
@@ -63,6 +71,8 @@ export class TimelineEngine {
   #stalledPovIds: string[] = []
   /** Set when a stall paused playback, so it can resume once everyone recovers. */
   #resumeAfterStall = false
+  /** Consecutive ticks seen buffering, for the hysteresis below. */
+  #stallTicks = 0
   #suppressCorrectionUntil = 0
   #audioPovId: string | undefined
   #volume = 1
@@ -239,32 +249,54 @@ export class TimelineEngine {
   #onTick(): void {
     if (this.#players.size === 0) return
 
+    /*
+     * Stall handling is suspended right after any seek.
+     *
+     * A seeking player legitimately stops reporting progress, and on Twitch
+     * "stalled" is *inferred* from exactly that. Without this window the
+     * sequence self-perpetuates: resume, seek, the seek reads as a stall,
+     * pause everyone, unstall, resume, seek — playback visibly strobes.
+     */
+    const settling = performance.now() < this.#suppressCorrectionUntil
+
     const stalledIds: string[] = []
-    for (const [id, entry] of this.#players) {
-      if (entry.player.isBuffering()) stalledIds.push(id)
+    if (!settling) {
+      for (const [id, entry] of this.#players) {
+        if (entry.player.isBuffering()) stalledIds.push(id)
+      }
     }
 
     // One POV buffering means every other POV is running ahead of it. Holding
-    // everyone is the only way the angles stay comparable.
+    // everyone is the only way the angles stay comparable. Requiring two
+    // consecutive ticks first, because a single tick of "no progress" is far
+    // more often a scheduling hiccup than a real stall, and pausing every
+    // player for it is worse than the drift it prevents.
     if (stalledIds.length > 0 && this.#playing) {
-      this.#stalled = true
-      this.#stalledPovIds = stalledIds
-      this.#resumeAfterStall = true
-      this.#playing = false
-      for (const { player } of this.#players.values()) player.pause()
-      this.#onChange()
+      this.#stallTicks += 1
+      if (this.#stallTicks >= STALL_TICKS_TO_HOLD) {
+        this.#stalled = true
+        this.#stalledPovIds = stalledIds
+        this.#resumeAfterStall = true
+        this.#playing = false
+        for (const { player } of this.#players.values()) player.pause()
+        this.#onChange()
+      }
       return
     }
 
-    if (stalledIds.length === 0 && this.#stalled) {
+    this.#stallTicks = 0
+
+    if (stalledIds.length === 0 && this.#stalled && !settling) {
       this.#stalled = false
       this.#stalledPovIds = []
       if (this.#resumeAfterStall) {
         this.#resumeAfterStall = false
-        // Re-align before resuming: whoever stalled is now behind the rest.
-        this.seekTo(this.#positionMs)
+        // Resume without seeking. Re-aligning here is what caused the strobe,
+        // and it is unnecessary: ordinary drift correction pulls the laggard
+        // back within a tick or two, gently and without another stall.
         this.#playing = true
         for (const { player } of this.#players.values()) player.play()
+        this.#suppressCorrectionUntil = performance.now() + SEEK_SETTLE_MS
       }
       this.#onChange()
       return

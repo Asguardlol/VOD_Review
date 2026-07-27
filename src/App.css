@@ -184,13 +184,12 @@ select {
 
 /* ---- Transport ---- */
 
+/* Under the video, not above it — it controls the thing it sits beneath. */
 .transport {
+  flex: none;
   padding: 10px 20px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  border-top: 1px solid var(--border);
 }
 
 .transport-row {
@@ -277,16 +276,45 @@ select {
 
 /* ---- Body split: selector on the side, players in the main area ---- */
 
-/* The sidebar has to fit two pull tiles side by side, which sets its width. */
-.review-body {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  align-items: start;
+/*
+ * The app owns the viewport and never scrolls as a whole. Video review means
+ * looking at the players and the pull list at the same time; a page that
+ * scrolls pushes one of them out of view exactly when you need both.
+ */
+.review-view {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
+/* The sidebar has to fit two pull tiles side by side, which sets its width. */
+.review-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+/* A column whose last section (the pull browser) takes the slack and scrolls. */
 .pov-sidebar {
-  max-height: calc(100vh - 52px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pull-browser {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.review-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .review-main {
@@ -476,10 +504,6 @@ button.primary {
 }
 
 /* ---- Pull browser ---- */
-
-.pull-browser {
-  padding-bottom: 24px;
-}
 
 .report-card {
   display: flex;
@@ -744,10 +768,18 @@ button.primary {
  * 1 -> one big player, 2 -> side by side, 3-4 -> 2x2. Two stacked vertically
  * would waste the horizontal space that makes two angles comparable at all.
  */
+/*
+ * The grid takes the space left between the header and the transport, and the
+ * tiles divide it. Sizing by height rather than by aspect ratio is what keeps
+ * the video on screen — a 16/9 box derived from width overflows the viewport
+ * as soon as the window is wide.
+ */
 .pov-grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   gap: 12px;
-  padding: 12px 20px 32px;
+  padding: 12px 20px;
 }
 
 .pov-grid[data-count='1'] {
@@ -770,6 +802,9 @@ button.primary {
 }
 
 .pov-tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -830,9 +865,11 @@ button.primary {
   text-align: center;
 }
 
+/* Fills the tile rather than dictating its size, so the grid controls layout. */
 .pov-video {
   position: relative;
-  aspect-ratio: 16 / 9;
+  flex: 1;
+  min-height: 0;
   background: #000;
 }
 

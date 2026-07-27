@@ -143,7 +143,15 @@ export async function createTwitchPlayer(
     ready,
     play: () => player.play(),
     pause: () => player.pause(),
-    seek: (seconds) => player.seek(Math.max(0, seconds)),
+    seek: (seconds) => {
+      // Clear the stall inference across a seek. Position necessarily jumps and
+      // then sits still for a moment, which is indistinguishable from buffering
+      // to a watcher that only looks at whether the clock advanced.
+      buffering = false
+      lastTime = -1
+      lastTimeAt = performance.now()
+      player.seek(Math.max(0, seconds))
+    },
     getCurrentTime: () => player.getCurrentTime() ?? 0,
     getDuration: () => player.getDuration() ?? 0,
     isBuffering: () => buffering,
