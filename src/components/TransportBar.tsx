@@ -2,7 +2,6 @@ import { useState } from 'react'
 import type { TimelineEngine, TimelineState } from '../core/timeline'
 import type { VodDeath, VodMarker } from '../core/types'
 import { formatTime } from '../core/format'
-import { CLASS_COLORS } from '../core/classColors'
 
 interface Props {
   engine: TimelineEngine
@@ -121,20 +120,14 @@ export function TransportBar({
 
       <div className="scrub-row">
         {/*
-          Deaths sit behind the range input so the thumb stays grabbable. They
-          are the main thing being read off this bar, so they get the strongest
-          treatment: a full-height line in the player's class colour.
+          Deaths sit behind the range input so the thumb stays grabbable.
+          Uniformly red: the question this bar answers is "when did people die",
+          and colouring each by class made a wall of shifting colours that was
+          harder to read, not easier. Who died is in the tooltip.
         */}
         <div className="death-strip" aria-hidden="true">
           {deaths.map((death) => (
-            <span
-              key={death.id}
-              className="death-line"
-              style={{
-                left: percent(death.atMs),
-                background: death.wowClass ? CLASS_COLORS[death.wowClass] : undefined,
-              }}
-            />
+            <span key={death.id} className="death-line" style={{ left: percent(death.atMs) }} />
           ))}
         </div>
 
@@ -161,10 +154,7 @@ export function TransportBar({
             <button
               key={death.id}
               className="death-pip"
-              style={{
-                left: percent(death.atMs),
-                background: death.wowClass ? CLASS_COLORS[death.wowClass] : undefined,
-              }}
+              style={{ left: percent(death.atMs) }}
               title={`${death.playerName} died at ${formatTime(death.atMs)}${
                 death.killingBlow ? ` — ${death.killingBlow}` : ''
               } (jumps ${DEATH_LEAD_MS / 1000}s before)`}
