@@ -7,7 +7,12 @@
  */
 export const WCL_TIER_COLORS = {
   common: '#ffffff',
-  uncommon: '#1eff00',
+  /**
+   * The deeper of the two greens. Sits below blue on the scale, so it needs to
+   * stay clearly distinct from the lighter green a kill gets — they appear in
+   * the same list and must not read as the same result.
+   */
+  uncommon: '#3fbf4a',
   rare: '#0070ff',
   epic: '#a335ee',
   legendary: '#ff8000',
@@ -20,11 +25,13 @@ export type WclTier = keyof typeof WCL_TIER_COLORS
  * Kills get their own colour, outside the tier scale.
  *
  * A kill is a different kind of result, not the best wipe — grading it on the
- * same scale invites reading it as "99%+ damage done" rather than "done". A
- * light green reads as finished at a glance and stays clear of the neon green
- * used for the 25–49% band.
+ * same scale invites reading it as "99%+ damage done" rather than "done".
+ *
+ * The lighter of the two greens, paired with `uncommon` above: both appear in
+ * the same list, so the difference between them has to survive a glance at a
+ * three-pixel bar.
  */
-export const KILL_COLOR = '#90ee90'
+export const KILL_COLOR = '#7ee787'
 
 /**
  * WCL's percentile bands, which are not evenly spaced.
