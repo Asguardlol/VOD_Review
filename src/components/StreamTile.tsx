@@ -102,13 +102,11 @@ export function StreamTile({
     <div className={`pov-tile${isAudio ? ' is-audio' : ''}${isStalled ? ' is-stalled' : ''}`}>
       <div className="pov-header">
         {/*
-          Which stream is audible is chosen from the sidebar, not from a control
-          on the tile. Volume lives on the transport with the other playback
-          controls; a speaker icon here read as a volume button and behaved like
-          a source selector, which is the worst of both.
+          No audio marker here. Which stream is audible is chosen and shown in
+          the sidebar, and the tile already carries an accent border when it is
+          the audible one — a speaker glyph on top of that was noise.
         */}
         <span className="pov-label" title={vod.title ?? stream.label}>
-          {isAudio && <span className="dim">🔊 </span>}
           {stream.label}
         </span>
 
