@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { SessionReport, VodFight } from '../core/types'
 import { formatAge, formatClock, formatTime } from '../core/format'
 import { colorForPull } from '../core/wclColors'
+import { reportUrl } from '../wcl/config'
 
 interface Props {
   report: SessionReport
@@ -28,6 +29,26 @@ export function PullBrowser({
   onRemove,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const [copied, setCopied] = useState(false)
+
+  /**
+   * Confirmation matters more than usual here: the button is an icon in a
+   * corner, and a copy that silently failed looks exactly like one that worked.
+   * The tick clears itself so the control does not stay in a done state.
+   */
+  const copyLink = () => {
+    void navigator.clipboard.writeText(reportUrl(report.code, selectedFightId)).then(
+      () => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      },
+      () => {
+        // Denied, or an insecure context. Falling back to a prompt keeps the
+        // link reachable instead of leaving the user with nothing.
+        window.prompt('Copy this link', reportUrl(report.code, selectedFightId))
+      },
+    )
+  }
 
   const groups = useMemo(() => {
     const byEncounter = new Map<number, { name: string; fights: VodFight[] }>()
@@ -70,6 +91,24 @@ export function PullBrowser({
             {report.fetchedAt ? formatAge(report.fetchedAt) : 'not loaded yet'}
           </span>
         </div>
+        {/*
+          Copies rather than opens: the log is usually wanted somewhere else —
+          pasted to whoever you are reviewing with — and a new tab would take
+          you away from the thing you are watching to get it.
+        */}
+        <button
+          className="icon-button"
+          title={
+            copied
+              ? 'Copied'
+              : selectedFightId === undefined
+                ? 'Copy the Warcraft Logs link for this report'
+                : 'Copy the Warcraft Logs link, landing on this pull'
+          }
+          onClick={copyLink}
+        >
+          {copied ? '✓' : '🔗'}
+        </button>
         <button
           className="icon-button"
           title="Reload the pull list — a live raid gains pulls while you watch"

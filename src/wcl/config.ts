@@ -34,6 +34,18 @@ export function createWclClient(): WclClient | undefined {
  * load something — but as an auto-trigger it would fire on the first letter of
  * anything typed. This only matches a real report URL or a full-length code.
  */
+/**
+ * The Warcraft Logs page for a report, optionally landing on one pull.
+ *
+ * `#fight=` is WCL's own anchor, so a link built with it opens on the pull you
+ * are looking at rather than at the top of the night — which is the whole
+ * reason to hand someone the log rather than the report code.
+ */
+export function reportUrl(code: string, fightId?: number): string {
+  const base = `https://www.warcraftlogs.com/reports/${code}`
+  return fightId === undefined ? base : `${base}#fight=${fightId}`
+}
+
 export function confidentReportCode(input: string): string | undefined {
   const trimmed = input.trim()
   const fromUrl = /warcraftlogs\.com\/reports\/([a-zA-Z0-9]+)/.exec(trimmed)
