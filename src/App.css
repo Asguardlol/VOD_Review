@@ -214,9 +214,14 @@ select {
   margin-left: auto;
 }
 
+/*
+ * The gap above the bar is deliberately larger than it needs to be: it is where
+ * the hover readout goes. Floating that chip over the button row instead saved
+ * 18px and covered the controls at the exact moment you were reaching for them.
+ */
 .scrub-row {
   position: relative;
-  margin-top: 8px;
+  margin-top: 26px;
 }
 
 .scrub-row input[type='range'] {
@@ -242,6 +247,42 @@ select {
   background: var(--danger);
   opacity: 0.75;
   transform: translateX(-1px);
+}
+
+/*
+ * Time under the cursor. Anchored the same way the death lines are, so the
+ * readout names the moment those lines sit on.
+ */
+.hover-readout {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.hover-line {
+  position: absolute;
+  top: 0;
+  height: 22px;
+  width: 1px;
+  background: var(--text);
+  opacity: 0.55;
+}
+
+.hover-time {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .pip-strip {

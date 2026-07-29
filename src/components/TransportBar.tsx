@@ -43,9 +43,26 @@ export function TransportBar({
   // While dragging, the scrubber shows the dragged value rather than the
   // engine's — otherwise the tick fights the user's thumb every 400ms.
   const [scrubMs, setScrubMs] = useState<number | undefined>()
+  // Time under the cursor, so you can read off a moment before committing to
+  // a seek — the same thing the death tooltips answer, for the gaps between.
+  const [hoverMs, setHoverMs] = useState<number | undefined>()
   const shown = scrubMs ?? state.positionMs
   const max = Math.max(durationMs, state.positionMs, 1)
-  const percent = (ms: number) => `${Math.min(100, Math.max(0, (ms / max) * 100))}%`
+  const ratio = (ms: number) => Math.min(100, Math.max(0, (ms / max) * 100))
+  const percent = (ms: number) => `${ratio(ms)}%`
+
+  /**
+   * Maps cursor x to a time the same way `percent` maps a time to x, so the
+   * readout agrees with where the death lines are actually drawn rather than
+   * with the range thumb, which is inset by half its own width at each end.
+   */
+  function trackHover(e: React.PointerEvent<HTMLDivElement>) {
+    // Touch has no hover: a tap would leave the label stuck until the next one.
+    if (e.pointerType === 'touch') return
+    const { left, width } = e.currentTarget.getBoundingClientRect()
+    if (width === 0) return
+    setHoverMs(Math.min(max, Math.max(0, ((e.clientX - left) / width) * max)))
+  }
 
   return (
     <div className="transport">
@@ -118,7 +135,29 @@ export function TransportBar({
         )}
       </div>
 
-      <div className="scrub-row">
+      <div
+        className="scrub-row"
+        onPointerMove={trackHover}
+        onPointerLeave={() => setHoverMs(undefined)}
+      >
+        {hoverMs !== undefined && (
+          <div className="hover-readout" aria-hidden="true" style={{ left: percent(hoverMs) }}>
+            {/*
+              Shifting the chip by its own position rather than a flat half
+              width keeps it inside the bar at both ends: centred in the middle,
+              flush left at 0:00, flush right at the end. Centring throughout
+              hangs it off the edge, where the sidebar clips it.
+            */}
+            <span
+              className="hover-time"
+              style={{ transform: `translateX(-${ratio(hoverMs)}%)` }}
+            >
+              {formatTime(hoverMs)}
+            </span>
+            <span className="hover-line" />
+          </div>
+        )}
+
         {/*
           Deaths sit behind the range input so the thumb stays grabbable.
           Uniformly red: the question this bar answers is "when did people die",
