@@ -220,33 +220,139 @@ select {
  * 18px and covered the controls at the exact moment you were reaching for them.
  */
 .scrub-row {
+  /*
+   * The track is drawn by hand rather than left native, because the death lines
+   * have to sit *inside* it — a native track is a fixed few pixels tall, too
+   * thin to hold a mark. This is the one number the strip, the lines and the
+   * hover line all measure against, so the bar resizes from one place.
+   */
+  --track-height: 16px;
+  /*
+   * Deliberately lighter than the transport it sits on. Every other surface
+   * colour in the palette is within a few points of the panel behind it, which
+   * at 16px tall left the bar reading as a smudge rather than as a bar.
+   */
+  --track-empty: #39404f;
+
   position: relative;
   margin-top: 26px;
 }
 
 .scrub-row input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
   width: 100%;
+  height: var(--track-height);
   padding: 0;
   background: none;
   border: none;
 }
 
-/* Death lines run behind the range input, so the thumb stays grabbable. */
-.death-strip {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 22px;
-  pointer-events: none;
+/*
+ * Elapsed is painted into the track itself, from a `--fill` the component sets,
+ * rather than as an overlay div — an overlay would paint above the input and
+ * clip the thumb it is supposed to meet. A bar this thick looks unfinished
+ * without it; the thumb alone is a small thing to hunt for.
+ */
+.scrub-row input[type='range']::-webkit-slider-runnable-track {
+  height: var(--track-height);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--fill, 0%),
+    var(--track-empty) var(--fill, 0%)
+  );
 }
 
-.death-line {
+.scrub-row input[type='range']::-moz-range-track {
+  height: var(--track-height);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--fill, 0%),
+    var(--track-empty) var(--fill, 0%)
+  );
+}
+
+/*
+ * The thumb stands taller than the track and overhangs it. A thumb contained
+ * within a track this thick reads as just another mark on the bar; standing
+ * proud of it keeps "where we are" distinct from "what happened".
+ */
+.scrub-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 6px;
+  height: 24px;
+  margin-top: calc((var(--track-height) - 24px) / 2);
+  border-radius: 3px;
+  background: var(--text);
+  border: 1px solid var(--bg);
+  cursor: pointer;
+}
+
+.scrub-row input[type='range']::-moz-range-thumb {
+  width: 6px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--text);
+  border: 1px solid var(--bg);
+  cursor: pointer;
+}
+
+/*
+ * Deaths live inside the track now, as hairlines rather than the blocks that
+ * used to sit under the bar. A block below the bar was a second row to read and
+ * a second place to look; a line at the position it refers to is just the bar.
+ *
+ * The strip passes clicks through so dragging still starts anywhere; only the
+ * lines themselves take them.
+ */
+.death-strip {
   position: absolute;
   top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--danger);
-  opacity: 0.75;
-  transform: translateX(-1px);
+  left: 0;
+  right: 0;
+  height: var(--track-height);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/*
+ * Wider than it looks: the visible line is 2px, but a 2px click target is not
+ * hittable, so the button carries transparent padding either side and paints
+ * the line through a background gradient.
+ */
+.death-line {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 10px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  transform: translateX(-5px);
+  background: linear-gradient(
+    to right,
+    transparent 4px,
+    var(--danger) 4px,
+    var(--danger) 6px,
+    transparent 6px
+  );
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.death-line:hover {
+  background: linear-gradient(
+    to right,
+    transparent 3px,
+    var(--text) 3px,
+    var(--text) 7px,
+    transparent 7px
+  );
 }
 
 /*
@@ -265,7 +371,7 @@ select {
 .hover-line {
   position: absolute;
   top: 0;
-  height: 22px;
+  height: var(--track-height);
   width: 1px;
   background: var(--text);
   opacity: 0.55;
@@ -285,32 +391,25 @@ select {
   white-space: nowrap;
 }
 
+/* Clears the thumb, which overhangs the bottom of the track by 4px. */
 .pip-strip {
   position: relative;
-  height: 12px;
+  height: 10px;
+  margin-top: 6px;
 }
 
-.death-pip,
 .marker-pip {
   position: absolute;
   top: 0;
   width: 7px;
-  height: 12px;
+  height: 10px;
   padding: 0;
   border: none;
   border-radius: 2px;
   transform: translateX(-3px);
-}
-
-.death-pip {
-  background: var(--danger);
-}
-
-.marker-pip {
   background: var(--warn);
 }
 
-.death-pip:hover,
 .marker-pip:hover {
   outline: 1px solid var(--text);
 }

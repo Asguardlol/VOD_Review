@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { TimelineEngine, TimelineState } from '../core/timeline'
 import type { VodDeath, VodMarker } from '../core/types'
 import { formatTime } from '../core/format'
@@ -159,14 +159,24 @@ export function TransportBar({
         )}
 
         {/*
-          Deaths sit behind the range input so the thumb stays grabbable.
+          Deaths are hairlines inside the track, and are themselves what you
+          click to jump — there is no separate row of pips to hit any more.
+
           Uniformly red: the question this bar answers is "when did people die",
           and colouring each by class made a wall of shifting colours that was
           harder to read, not easier. Who died is in the tooltip.
         */}
-        <div className="death-strip" aria-hidden="true">
+        <div className="death-strip">
           {deaths.map((death) => (
-            <span key={death.id} className="death-line" style={{ left: percent(death.atMs) }} />
+            <button
+              key={death.id}
+              className="death-line"
+              style={{ left: percent(death.atMs) }}
+              title={`${death.playerName} died at ${formatTime(death.atMs)}${
+                death.killingBlow ? ` — ${death.killingBlow}` : ''
+              } (jumps ${DEATH_LEAD_MS / 1000}s before)`}
+              onClick={() => engine.seekTo(Math.max(0, death.atMs - DEATH_LEAD_MS))}
+            />
           ))}
         </div>
 
@@ -176,6 +186,10 @@ export function TransportBar({
           max={max}
           step={100}
           value={shown}
+          // How much of the track is painted as elapsed. A custom property
+          // because the fill lives in the track pseudo-element, which inline
+          // styles cannot otherwise reach.
+          style={{ '--fill': percent(shown) } as CSSProperties}
           aria-label="Timeline position"
           onChange={(e) => setScrubMs(Number(e.target.value))}
           onPointerUp={() => {
@@ -188,18 +202,8 @@ export function TransportBar({
           }}
         />
 
+        {/* Bookmarks stay below the bar: they are yours, not the log's. */}
         <div className="pip-strip">
-          {deaths.map((death) => (
-            <button
-              key={death.id}
-              className="death-pip"
-              style={{ left: percent(death.atMs) }}
-              title={`${death.playerName} died at ${formatTime(death.atMs)}${
-                death.killingBlow ? ` — ${death.killingBlow}` : ''
-              } (jumps ${DEATH_LEAD_MS / 1000}s before)`}
-              onClick={() => engine.seekTo(Math.max(0, death.atMs - DEATH_LEAD_MS))}
-            />
-          ))}
           {markers.map((marker) => (
             <button
               key={marker.id}
