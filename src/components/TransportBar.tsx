@@ -120,8 +120,8 @@ export function TransportBar({
           />
         </label>
 
-        <button onClick={onAddMarker} title="Bookmark this moment">
-          + Marker
+        <button onClick={onAddMarker} title="Write a note on this moment">
+          + Note
         </button>
 
         {state.stalled && (

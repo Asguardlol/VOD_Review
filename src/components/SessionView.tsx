@@ -5,13 +5,7 @@ import { useSession } from '../hooks/useSession'
 import { useTimeline } from '../hooks/useTimeline'
 import { newId } from '../core/ids'
 import { timelineOffsetMs, vodForStream, coversPull } from '../core/sync'
-import {
-  buildShareUrl,
-  encodeSession,
-  exportSessionJson,
-  importSessionJson,
-  URL_LENGTH_WARN_THRESHOLD,
-} from '../core/share'
+import { buildShareUrl, exportSessionJson, importSessionJson } from '../core/share'
 import { confidentReportCode, createWclClient, parseReportCode } from '../wcl/config'
 import { parseChannelLogin } from '../twitch/helix'
 import { TwitchAuthError } from '../twitch/client'
@@ -27,11 +21,15 @@ import { PullBrowser } from './PullBrowser'
 import { StreamTile } from './StreamTile'
 import { TransportBar } from './TransportBar'
 import { MenuButton } from './MenuButton'
+import { NotesPanel } from './NotesPanel'
+import { ShareDialog } from './ShareDialog'
 import { WclConnectPanel } from './WclConnectPanel'
 
 interface Props {
   store: SessionStore
   sessionId: string
+  /** True when this tab got here by opening a share link. */
+  fromShare?: boolean
   onSwitchSession(): void
 }
 
@@ -43,7 +41,7 @@ interface Props {
  */
 const MAX_WATCHING = 4
 
-export function SessionView({ store, sessionId, onSwitchSession }: Props) {
+export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Props) {
   const { session, loading, update } = useSession(store, sessionId)
   const { engine, state } = useTimeline()
   const wclClient = useMemo(() => createWclClient(), [])
@@ -54,6 +52,16 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [twitchConnected, setTwitchConnected] = useState(() => !!getStoredToken())
+  /** Set while the share dialog is open; holds the link it is showing. */
+  const [shareUrl, setShareUrl] = useState<string | undefined>()
+  /** Whether the notes panel is open. Per-session, not persisted. */
+  const [notesOpen, setNotesOpen] = useState(false)
+  /**
+   * Arriving from a share link starts collapsed: everything needed to watch is
+   * already set up, and the stream list is a setup surface. Every other way in
+   * is someone building the session, who needs it.
+   */
+  const [sidebarOpen, setSidebarOpen] = useState(!fromShare)
   /**
    * Last code auto-loaded, so re-editing the same text doesn't refire.
    * A ref rather than state: it must update synchronously within the same
@@ -174,6 +182,42 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
     })()
   }, [session, twitchConnected, twitchClient, resolveStreams, update])
 
+  /**
+   * Fills in a report that arrived without its fight list.
+   *
+   * Share links carry the report *code* and drop the fights, which are bulky and
+   * re-fetchable — but that leaves the recipient looking at a session with no
+   * pulls in it and no obvious reason why. This fetches them once the viewer's
+   * own Warcraft Logs connection exists, so the link opens on a working session
+   * rather than on an empty pull list with a refresh button to discover.
+   *
+   * Keyed by code so a report that genuinely fails does not retry in a loop.
+   */
+  const backfillRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const report = session?.report
+    if (!report || report.fights.length > 0 || !wclClient) return
+    if (backfillRef.current === report.code) return
+    backfillRef.current = report.code
+
+    void (async () => {
+      try {
+        const fetched = await wclClient.listFights(report.code)
+        update((s) =>
+          s.report?.code === fetched.code
+            ? {
+                ...s,
+                report: { ...s.report, fights: fetched.fights, fetchedAt: Date.now() },
+              }
+            : s,
+        )
+      } catch {
+        // Not signed in yet, or the report is private to someone else. The
+        // report card's own refresh is the way back, and it says as much.
+      }
+    })()
+  }, [session?.report, wclClient, update])
+
   if (loading) return <p className="pad">Loading…</p>
   if (!session) {
     return (
@@ -206,24 +250,31 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
           }
         }
       }
-      update((s) => ({
-        ...s,
-        title: s.title === 'Untitled night' ? report.title : s.title,
-        report: {
-          code: report.code,
-          title: report.title,
-          startTime: report.startTime,
-          endTime: report.endTime,
-          fights: report.fights,
-          fetchedAt: Date.now(),
-        },
-        streams,
-        // A stale pull id from a previous report would silently point at the
-        // wrong fight: fight ids are only unique within a report.
-        selectedFightId: undefined,
-        deaths: [],
-        events: [],
-      }))
+      update((s) => {
+        // Refreshing the report you are already on must not throw away the pull
+        // you are watching — a raid night in progress gains pulls while you look
+        // at it, and refresh is how you see them. A *different* report is the
+        // case the reset exists for: fight ids are only unique within a report,
+        // so carrying one over would silently point at the wrong pull.
+        const sameReport = s.report?.code === report.code
+        return {
+          ...s,
+          title: s.title === 'Untitled night' ? report.title : s.title,
+          report: {
+            code: report.code,
+            title: report.title,
+            startTime: report.startTime,
+            endTime: report.endTime,
+            fights: report.fights,
+            fetchedAt: Date.now(),
+          },
+          streams,
+          selectedFightId: sameReport ? s.selectedFightId : undefined,
+          markers: sameReport ? s.markers : [],
+          deaths: sameReport ? s.deaths : [],
+          events: sameReport ? s.events : [],
+        }
+      })
       setReportInput('')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not load that report.')
@@ -233,7 +284,9 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
   }
 
   const selectFight = async (fight: VodFight) => {
-    update((s) => ({ ...s, selectedFightId: fight.fightId, deaths: [], markers: [] }))
+    // Notes are kept: they carry the pull they belong to, so browsing attempts
+    // no longer throws away what was written about the one you just left.
+    update((s) => ({ ...s, selectedFightId: fight.fightId, deaths: [] }))
     engine.seekTo(0)
     if (!wclClient) return
     try {
@@ -404,6 +457,29 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
     )
   }
 
+  /**
+   * Notes are markers. Same record, same share payload — the panel is a way to
+   * read and write them as a list rather than a second kind of annotation.
+   */
+  const addNote = (atMs: number, label: string) => {
+    const fightId = selectedFight?.fightId
+    update((s) => ({
+      ...s,
+      markers: [...s.markers, { id: newId(), atMs, label, fightId }],
+    }))
+  }
+
+  const editNote = (id: string, label: string, note: string | undefined) => {
+    update((s) => ({
+      ...s,
+      markers: s.markers.map((m) => (m.id === id ? { ...m, label, note } : m)),
+    }))
+  }
+
+  const removeNote = (id: string) => {
+    update((s) => ({ ...s, markers: s.markers.filter((m) => m.id !== id) }))
+  }
+
   const downloadJson = () => {
     const blob = new Blob([exportSessionJson(session)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -414,21 +490,23 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
     URL.revokeObjectURL(url)
   }
 
-  const share = () => {
-    const { length } = encodeSession(session)
-    if (length > URL_LENGTH_WARN_THRESHOLD) {
-      if (
-        !window.confirm(
-          `This session makes a ${length}-character link, which some chat ` +
-            `clients will truncate. Copy it anyway? (Cancel to download JSON.)`,
-        )
-      ) {
-        downloadJson()
-        return
-      }
-    }
-    void navigator.clipboard.writeText(buildShareUrl(session))
-  }
+  /**
+   * Opens the share dialog.
+   *
+   * This used to write to the clipboard and say nothing, which was
+   * indistinguishable from a dead button — and if the write was refused, it
+   * genuinely was one. Showing the link means there is always something to copy
+   * by hand, whatever the clipboard permission does.
+   */
+  const share = () => setShareUrl(buildShareUrl(session))
+
+  /**
+   * Notes for the pull on screen. Ones with no pull recorded are from before
+   * notes were keyed, and are shown wherever you are rather than orphaned.
+   */
+  const pullMarkers = session.markers.filter(
+    (m) => m.fightId === undefined || m.fightId === session.selectedFightId,
+  )
 
   const watched = watching
     .map((id) => session.streams.find((s) => s.id === id))
@@ -458,6 +536,20 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
               Connect Twitch
             </button>
           ))}
+        <button
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-pressed={sidebarOpen}
+          title={sidebarOpen ? 'Hide the stream list' : 'Show the stream list'}
+        >
+          {sidebarOpen ? '◧' : '▢'} Streams
+        </button>
+        <button
+          onClick={() => setNotesOpen((v) => !v)}
+          aria-pressed={notesOpen}
+          title="Timestamped notes on this pull"
+        >
+          Notes{pullMarkers.length > 0 ? ` (${pullMarkers.length})` : ''}
+        </button>
         <button onClick={share}>Share</button>
         <MenuButton
           actions={[
@@ -474,14 +566,18 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
         />
       </header>
 
-      <div className="review-body">
+      <div
+        className="review-body"
+        data-sidebar={sidebarOpen ? 'on' : 'off'}
+        data-notes={notesOpen ? 'on' : 'off'}
+      >
         {/*
           The sidebar is a column with one growing section: the stream list and
           connection panels keep their natural height, and the pull browser
           takes the rest and scrolls on its own. A raid night is dozens of
           pulls, so it has to scroll without dragging the whole page with it.
         */}
-        <aside className="pov-sidebar">
+        <aside className="pov-sidebar" hidden={!sidebarOpen}>
           <StreamSidebar
             streams={session.streams}
             guilds={session.guilds}
@@ -670,26 +766,40 @@ export function SessionView({ store, sessionId, onSwitchSession }: Props) {
             <TransportBar
               engine={engine}
               state={state}
-              markers={session.markers}
+              markers={pullMarkers}
               deaths={session.deaths}
               durationMs={selectedFight.durationMs}
               boundedByFight
-              onAddMarker={() => {
-                const label = window.prompt('Label for this moment')
-                if (!label?.trim()) return
-                update((s) => ({
-                  ...s,
-                  markers: [
-                    ...s.markers,
-                    { id: newId(), atMs: Math.round(state.positionMs), label: label.trim() },
-                  ],
-                }))
-              }}
+              // The bar's own button opens the panel and lets you type there,
+              // rather than raising a prompt: a note wants somewhere to be read
+              // back, and that somewhere is the list.
+              onAddMarker={() => setNotesOpen(true)}
               onSeekMarker={(m) => engine.seekTo(m.atMs)}
             />
           )}
         </main>
+
+        {notesOpen && (
+          <NotesPanel
+            markers={pullMarkers}
+            positionMs={state.positionMs}
+            hasPull={!!selectedFight}
+            onSeek={(m) => engine.seekTo(m.atMs)}
+            onAdd={addNote}
+            onEdit={editNote}
+            onRemove={removeNote}
+            onClose={() => setNotesOpen(false)}
+          />
+        )}
       </div>
+
+      {shareUrl && (
+        <ShareDialog
+          url={shareUrl}
+          onDownloadJson={downloadJson}
+          onClose={() => setShareUrl(undefined)}
+        />
+      )}
     </div>
   )
 }

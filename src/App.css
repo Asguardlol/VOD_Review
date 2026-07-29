@@ -428,12 +428,36 @@ select {
   overflow: hidden;
 }
 
-/* The sidebar has to fit two pull tiles side by side, which sets its width. */
+/*
+ * The sidebar has to fit two pull tiles side by side, which sets its width.
+ *
+ * Both side panels can be away, so the column track is spelled out per
+ * combination rather than derived: a hidden panel is `display: none` and stops
+ * being a grid item altogether, so the remaining panes would otherwise shift
+ * into the wrong tracks.
+ */
 .review-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.review-body[data-sidebar='off'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.review-body[data-notes='on'] {
+  grid-template-columns: 320px minmax(0, 1fr) 320px;
+}
+
+.review-body[data-sidebar='off'][data-notes='on'] {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+/* Beats `.pov-sidebar { display: flex }`, which would otherwise win. */
+.pov-sidebar[hidden] {
+  display: none;
 }
 
 /* A column whose last section (the pull browser) takes the slack and scrolls. */
@@ -462,7 +486,9 @@ select {
 }
 
 @media (max-width: 860px) {
-  .review-body {
+  .review-body,
+  .review-body[data-notes='on'],
+  .review-body[data-sidebar='off'][data-notes='on'] {
     grid-template-columns: 1fr;
   }
 }
@@ -1113,4 +1139,206 @@ button.primary {
 
 .review-view .back {
   padding: 6px 10px;
+}
+
+/* ---- Notes panel ---- */
+
+/*
+ * The right-hand counterpart to the stream list: what happened, rather than who
+ * is showing it. Scrolls on its own so a long pull's worth of notes never drags
+ * the players off screen.
+ */
+.notes-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notes-header h2 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+/* The timestamp is shown, not typed: a note lands where the transport is. */
+.note-compose {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.note-compose input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+}
+
+.note-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.note-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2px 4px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/*
+ * Time and text are one button, the way a YouTube chapter line is: the whole
+ * row is the thing you click, not a small timestamp beside inert text.
+ */
+.note-seek {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 2px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+}
+
+.note-seek:hover:not(:disabled) {
+  background: rgb(255 255 255 / 7%);
+  border-color: transparent;
+}
+
+.note-seek .note-time {
+  color: var(--accent);
+  flex: none;
+}
+
+.note-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.note-detail {
+  grid-column: 1 / -1;
+  margin: 0 0 4px 2px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.note-edit {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.note-edit textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.note-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- Modal ---- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 55%);
+}
+
+.modal h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.modal p {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.share-url {
+  width: 100%;
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.warn-note {
+  color: var(--warn);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1524;
+  font-weight: 600;
+}
+
+/* ---- Opening a share link you already have ---- */
+
+.share-conflict {
+  max-width: 620px;
+}
+
+.share-conflict h2 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+
+.share-conflict-actions {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 4px;
 }

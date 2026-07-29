@@ -232,12 +232,21 @@ export interface VodSession {
   updatedAt: number
 }
 
-/** A bookmarked moment, relative to the selected pull's start. */
+/**
+ * A note on a moment, relative to the pull's start.
+ *
+ * `fightId` is what stops notes being destroyed by browsing: they used to be a
+ * flat list on the session and were cleared whenever a pull was selected, so
+ * looking at another attempt threw away everything written about this one.
+ * Optional only for markers written before this existed, which are shown
+ * against whichever pull is open.
+ */
 export interface VodMarker {
   id: string
   atMs: number
   label: string
   note?: string
+  fightId?: number
 }
 
 // ---------------------------------------------------------------------------

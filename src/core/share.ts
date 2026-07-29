@@ -94,13 +94,26 @@ export function decodeSession(fragment: string): VodSession | undefined {
 }
 
 /**
- * Prepares an opened share link for saving locally.
+ * What to do with an opened share link.
  *
- * Fresh ids on purpose: two people opening the same link and saving it should
- * end up with independent copies, not fight over one id.
+ * The id travels in the payload, so a link is a stable handle on one session
+ * rather than a new session every time it is opened. Re-sending an updated link
+ * for the same night therefore updates what the recipient already has instead
+ * of leaving them with six near-identical copies to tell apart.
+ *
+ * That only holds while the recipient agrees to it, which is why this is a
+ * choice and not a rule: their copy may carry markers they wrote and broadcast
+ * delays they tuned, and none of that can be merged with an incoming version.
+ * The caller asks; this just carries out the answer.
  */
-export function adoptSharedSession(session: VodSession): VodSession {
+export type ShareAdoption = 'update-in-place' | 'as-new-copy'
+
+export function adoptSharedSession(
+  session: VodSession,
+  adoption: ShareAdoption,
+): VodSession {
   const now = Date.now()
+  if (adoption === 'update-in-place') return { ...session, updatedAt: now }
   return {
     ...session,
     id: newId(),
@@ -118,7 +131,9 @@ export function importSessionJson(text: string): VodSession | undefined {
   try {
     const payload = JSON.parse(text) as SharePayloadV2
     if (payload?.v !== 2 || !payload.session) return undefined
-    return adoptSharedSession(normalizeSession(payload.session))
+    // A file is not a link: it has no id worth honouring here, since importing
+    // one only lifts its stream list into the session already open.
+    return adoptSharedSession(normalizeSession(payload.session), 'as-new-copy')
   } catch {
     return undefined
   }
