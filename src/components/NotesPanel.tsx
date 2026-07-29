@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { VodMarker } from '../core/types'
-import { formatTime } from '../core/format'
+import { formatTime, parseTimeInput } from '../core/format'
 import { MenuButton } from './MenuButton'
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   hasPull: boolean
   onSeek(marker: VodMarker): void
   onAdd(atMs: number, label: string): void
-  onEdit(id: string, label: string, note: string | undefined): void
+  onEdit(id: string, label: string, note: string | undefined, atMs: number): void
   onRemove(id: string): void
   onClose(): void
 }
@@ -39,29 +39,48 @@ export function NotesPanel({
   onClose,
 }: Props) {
   const [draft, setDraft] = useState('')
+  /**
+   * A typed-in time, or undefined to follow the playhead.
+   *
+   * Following by default is what you want while watching — you stop at the
+   * moment and write about it. But the playhead is at 0:00 whenever nothing is
+   * loaded, so without a way to type the time every note piled up at zero.
+   */
+  const [timeDraft, setTimeDraft] = useState<string | undefined>()
   const [editing, setEditing] = useState<string | undefined>()
   const [editLabel, setEditLabel] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [editTime, setEditTime] = useState('')
 
   const sorted = [...markers].sort((a, b) => a.atMs - b.atMs)
 
+  const shownTime = timeDraft ?? formatTime(positionMs)
+  const draftAtMs = timeDraft === undefined ? Math.round(positionMs) : parseTimeInput(timeDraft)
+
   const submitDraft = () => {
     const label = draft.trim()
-    if (!label) return
-    onAdd(Math.round(positionMs), label)
+    if (!label || draftAtMs === undefined) return
+    onAdd(draftAtMs, label)
     setDraft('')
+    // Back to following the playhead: the next note is usually about wherever
+    // you have got to, not about the time you just typed.
+    setTimeDraft(undefined)
   }
 
   const startEdit = (marker: VodMarker) => {
     setEditing(marker.id)
     setEditLabel(marker.label)
     setEditNote(marker.note ?? '')
+    setEditTime(formatTime(marker.atMs))
   }
 
   const commitEdit = () => {
     if (!editing) return
     const label = editLabel.trim()
-    if (label) onEdit(editing, label, editNote.trim() || undefined)
+    const atMs = parseTimeInput(editTime)
+    if (label && atMs !== undefined) {
+      onEdit(editing, label, editNote.trim() || undefined, atMs)
+    }
     setEditing(undefined)
   }
 
@@ -79,16 +98,26 @@ export function NotesPanel({
       ) : (
         <>
           <div className="note-compose">
-            <span className="note-time dim">{formatTime(positionMs)}</span>
+            <input
+              className={`note-time-input${draftAtMs === undefined ? ' invalid' : ''}`}
+              value={shownTime}
+              aria-label="Time for this note"
+              title="Follows the playhead until you type a time. m:ss or h:mm:ss."
+              onChange={(e) => setTimeDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submitDraft()
+                if (e.key === 'Escape') setTimeDraft(undefined)
+              }}
+            />
             <input
               value={draft}
-              placeholder="What happened here?"
+              placeholder="What happened?"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submitDraft()
               }}
             />
-            <button onClick={submitDraft} disabled={!draft.trim()}>
+            <button onClick={submitDraft} disabled={!draft.trim() || draftAtMs === undefined}>
               Add
             </button>
           </div>
@@ -104,15 +133,29 @@ export function NotesPanel({
                 <li key={marker.id} className="note-item">
                   {editing === marker.id ? (
                     <div className="note-edit">
-                      <input
-                        value={editLabel}
-                        aria-label="Note"
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') commitEdit()
-                          if (e.key === 'Escape') setEditing(undefined)
-                        }}
-                      />
+                      <div className="note-edit-row">
+                        <input
+                          className={`note-time-input${
+                            parseTimeInput(editTime) === undefined ? ' invalid' : ''
+                          }`}
+                          value={editTime}
+                          aria-label="Time"
+                          onChange={(e) => setEditTime(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit()
+                            if (e.key === 'Escape') setEditing(undefined)
+                          }}
+                        />
+                        <input
+                          value={editLabel}
+                          aria-label="Note"
+                          onChange={(e) => setEditLabel(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit()
+                            if (e.key === 'Escape') setEditing(undefined)
+                          }}
+                        />
+                      </div>
                       <textarea
                         value={editNote}
                         rows={2}

@@ -39,6 +39,22 @@ export function formatAge(unixMs: number): string {
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
 
+/**
+ * Reads a timestamp someone typed: "2:13", "1:02:30", or a bare "90" meaning
+ * ninety seconds. Returns undefined for anything it cannot read, so the caller
+ * can refuse the input rather than silently store a zero.
+ */
+export function parseTimeInput(text: string): number | undefined {
+  const parts = text.trim().split(':')
+  if (parts.length > 3) return undefined
+  let total = 0
+  for (const part of parts) {
+    if (!/^\d+$/.test(part)) return undefined
+    total = total * 60 + Number(part)
+  }
+  return total * 1000
+}
+
 /** Precise form for the sync readout, where a tenth of a second matters. */
 export function formatPrecise(ms: number): string {
   const sign = ms < 0 ? '-' : ''

@@ -1188,6 +1188,11 @@ button.primary {
   padding: 5px 8px;
 }
 
+.note-compose button {
+  flex: none;
+  padding: 5px 8px;
+}
+
 .note-time {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
@@ -1341,4 +1346,34 @@ button.primary {
   display: flex;
   gap: 8px;
   margin: 16px 0 4px;
+}
+
+/*
+ * The time is a field, not a label: it follows the playhead while you watch,
+ * but nothing is loaded until a stream resolves, and a playhead pinned at zero
+ * silently gave every note the same timestamp.
+ */
+.note-compose .note-time-input,
+.note-edit-row .note-time-input {
+  flex: none;
+  width: 56px;
+  padding: 5px 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: center;
+}
+
+.note-compose .note-time-input.invalid,
+.note-edit-row .note-time-input.invalid {
+  border-color: var(--danger);
+}
+
+.note-edit-row {
+  display: flex;
+  gap: 6px;
+}
+
+.note-edit-row input:last-child {
+  flex: 1;
+  min-width: 0;
 }

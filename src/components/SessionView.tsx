@@ -469,10 +469,10 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
     }))
   }
 
-  const editNote = (id: string, label: string, note: string | undefined) => {
+  const editNote = (id: string, label: string, note: string | undefined, atMs: number) => {
     update((s) => ({
       ...s,
-      markers: s.markers.map((m) => (m.id === id ? { ...m, label, note } : m)),
+      markers: s.markers.map((m) => (m.id === id ? { ...m, label, note, atMs } : m)),
     }))
   }
 
