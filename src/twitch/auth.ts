@@ -13,8 +13,11 @@
  * which is why that one is still paste-a-token or run a proxy.
  */
 
+import { randomString } from '../core/random'
+
 const TOKEN_KEY = 'twitch.accessToken'
 const RETURN_ROUTE_KEY = 'twitch.returnRoute'
+const STATE_KEY = 'twitch.oauthState'
 
 export function getTwitchClientId(): string | undefined {
   return import.meta.env.VITE_TWITCH_CLIENT_ID || undefined
@@ -47,6 +50,10 @@ export function getRedirectUri(): string {
 export function beginTwitchLogin(): void {
   const clientId = getTwitchClientId()
   if (!clientId) return
+
+  const state = randomString(16)
+  // sessionStorage, not local: it is one-shot and belongs to this login attempt.
+  sessionStorage.setItem(STATE_KEY, state)
   sessionStorage.setItem(RETURN_ROUTE_KEY, window.location.hash)
 
   const url = new URL('https://id.twitch.tv/oauth2/authorize')
@@ -56,6 +63,9 @@ export function beginTwitchLogin(): void {
   // Public VOD listings need no scopes — only an app or user token. Asking for
   // nothing keeps the consent screen honest about what this actually reads.
   url.searchParams.set('scope', '')
+  // Ties the callback to this attempt, so a token can only be stored by a login
+  // this tab actually started. See `captureTwitchToken`.
+  url.searchParams.set('state', state)
   window.location.assign(url.toString())
 }
 
@@ -73,6 +83,15 @@ export function beginTwitchLogin(): void {
  * the screen blank until a manual refresh.
  *
  * So this fixes up the URL in place and the caller carries on rendering.
+ *
+ * ## Why the state check
+ *
+ * Without it, any URL carrying `#access_token=…` stores whatever token it names
+ * — so a crafted link could plant an attacker's token in someone's browser and
+ * have their lookups run under it. The consequence is mild here, because this
+ * flow asks for no scopes, but "mild" is not a reason to accept a token whose
+ * provenance is unknown. A callback with no matching state is discarded; the URL
+ * is still tidied so nothing is left stuck.
  */
 export function captureTwitchToken(): void {
   const hash = window.location.hash
@@ -80,10 +99,15 @@ export function captureTwitchToken(): void {
 
   const params = new URLSearchParams(hash.replace(/^#/, ''))
   const token = params.get('access_token')
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-
+  const returnedState = params.get('state')
+  const expectedState = sessionStorage.getItem(STATE_KEY)
   const returnRoute = sessionStorage.getItem(RETURN_ROUTE_KEY) || '#/'
+  sessionStorage.removeItem(STATE_KEY)
   sessionStorage.removeItem(RETURN_ROUTE_KEY)
+
+  if (token && expectedState && returnedState === expectedState) {
+    localStorage.setItem(TOKEN_KEY, token)
+  }
 
   const { pathname, search } = window.location
   window.history.replaceState(null, '', `${pathname}${search}${returnRoute}`)

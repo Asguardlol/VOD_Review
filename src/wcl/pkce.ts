@@ -15,6 +15,8 @@
  * outright rather than sitting alongside it.
  */
 
+import { base64UrlEncode, randomString } from '../core/random'
+
 const AUTHORIZE_URL = 'https://www.warcraftlogs.com/oauth/authorize'
 const TOKEN_URL = 'https://www.warcraftlogs.com/oauth/token'
 
@@ -46,16 +48,6 @@ export function isWclConfigured(): boolean {
  */
 export function getRedirectUri(): string {
   return `${window.location.origin}${window.location.pathname}`
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-function randomString(byteLength: number): string {
-  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(byteLength)))
 }
 
 async function challengeFor(verifier: string): Promise<string> {
