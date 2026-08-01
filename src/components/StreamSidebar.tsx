@@ -27,8 +27,8 @@ interface Props {
   onRemoveGuild(guildId: string): void
   /** Opens the paste box. The parent owns what pasted text means. */
   onImport(): void
-  /** The roster as JSON, for the clipboard. */
-  rosterJson(): string
+  /** The stream list as JSON, for the clipboard. */
+  streamsJson(): string
 }
 
 export interface StreamDraft {
@@ -106,7 +106,7 @@ export function StreamSidebar({
   onRenameGuild,
   onRemoveGuild,
   onImport,
-  rosterJson,
+  streamsJson,
 }: Props) {
   const [copied, setCopied] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -124,16 +124,16 @@ export function StreamSidebar({
   /**
    * The tick is the only signal the copy happened — this replaced a file
    * download, which announced itself. If the browser refuses the write the JSON
-   * goes in a prompt, so the roster is still recoverable by hand.
+   * goes in a prompt, so the list is still recoverable by hand.
    */
-  const copyRoster = () => {
-    const json = rosterJson()
+  const copyStreams = () => {
+    const json = streamsJson()
     void navigator.clipboard.writeText(json).then(
       () => {
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1500)
       },
-      () => window.prompt('Copy this roster', json),
+      () => window.prompt('Copy this stream list', json),
     )
   }
 
@@ -368,9 +368,9 @@ export function StreamSidebar({
             + New stream
           </button>
           <button onClick={onAddGuild}>+ Guild</button>
-          <button onClick={onImport}>Paste roster</button>
-          <button onClick={copyRoster} disabled={streams.length === 0}>
-            {copied ? 'Copied ✓' : 'Copy roster'}
+          <button onClick={onImport}>Import streams</button>
+          <button onClick={copyStreams} disabled={streams.length === 0}>
+            {copied ? 'Copied ✓' : 'Export streams'}
           </button>
         </div>
       )}

@@ -7,9 +7,9 @@ import { newId } from '../core/ids'
 import { timelineOffsetMs, vodForStream, coversPull } from '../core/sync'
 import {
   buildShareUrl,
-  exportRosterJson,
+  exportStreamsJson,
   exportSessionJson,
-  importRosterJson,
+  importStreamsJson,
 } from '../core/share'
 import { confidentReportCode, createWclClient, parseReportCode } from '../wcl/config'
 import { parseChannelLogin } from '../twitch/helix'
@@ -60,7 +60,7 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
   const [twitchConnected, setTwitchConnected] = useState(() => !!getStoredToken())
   /** Set while the share dialog is open; holds the link it is showing. */
   const [shareUrl, setShareUrl] = useState<string | undefined>()
-  /** Whether the paste-a-roster box is open, and what it last complained about. */
+  /** Whether the import-streams box is open, and what it last complained about. */
   const [pasting, setPasting] = useState(false)
   const [pasteError, setPasteError] = useState<string | undefined>()
   /** Whether the notes panel is open. Per-session, not persisted. */
@@ -614,7 +614,7 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
             onAdd={(draft) => void addStream(draft)}
             onEdit={editStream}
             onRemove={removeStream}
-            rosterJson={() => exportRosterJson(session)}
+            streamsJson={() => exportStreamsJson(session)}
             onImport={() => {
               setPasteError(undefined)
               setPasting(true)
@@ -806,14 +806,14 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
 
       {pasting && (
         <PasteDialog
-          title="Paste roster"
-          confirmLabel="Replace roster"
+          title="Import streams"
+          confirmLabel="Import"
           note="Replaces the stream list in this session. Guilds named in the paste are added if you do not already have them; the report and your notes are untouched."
           error={pasteError}
           onConfirm={(text) => {
-            const imported = importRosterJson(text)
+            const imported = importStreamsJson(text)
             if (!imported) {
-              setPasteError('That is not a roster this version can read.')
+              setPasteError('That is not a stream list this version can read.')
               return
             }
             update((s) => {

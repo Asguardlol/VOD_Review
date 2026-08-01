@@ -124,7 +124,7 @@ export function adoptSharedSession(
 }
 
 /**
- * Just the roster: who is in this session and which guilds they belong to.
+ * Just the streams: who is in this session and which guilds they belong to.
  *
  * Separate from the session export because it answers a different question —
  * "here are my raiders" rather than "here is this night" — and it is the thing
@@ -136,15 +136,15 @@ export function adoptSharedSession(
  * per known guild and the ungrouped separately, so such a stream renders in
  * neither and silently disappears while still being in the data.
  */
-interface RosterPayload {
+interface StreamsPayload {
   v: 2
   streams: VodStream[]
   guilds: VodGuild[]
 }
 
-export function exportRosterJson(session: VodSession): string {
+export function exportStreamsJson(session: VodSession): string {
   const used = new Set(session.streams.map((s) => s.guildId).filter(Boolean))
-  const payload: RosterPayload = {
+  const payload: StreamsPayload = {
     v: 2,
     // Resolved VODs are specific to one report and one viewer's Twitch token.
     streams: session.streams.map((s) => ({
@@ -158,16 +158,16 @@ export function exportRosterJson(session: VodSession): string {
 }
 
 /**
- * Reads a pasted roster.
+ * Reads a pasted stream list.
  *
  * Accepts a full session export too, since that is the other thing someone
  * plausibly has on their clipboard and it contains everything needed.
  */
-export function importRosterJson(
+export function importStreamsJson(
   text: string,
 ): { streams: VodStream[]; guilds: VodGuild[] } | undefined {
   try {
-    const parsed = JSON.parse(text) as Partial<RosterPayload> & {
+    const parsed = JSON.parse(text) as Partial<StreamsPayload> & {
       session?: VodSession
     }
     const source = parsed.session ?? parsed
