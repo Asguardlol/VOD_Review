@@ -1148,13 +1148,27 @@ button.primary {
  * is showing it. Scrolls on its own so a long pull's worth of notes never drags
  * the players off screen.
  */
+/*
+ * The panel itself does not scroll — only the list inside it does. Scrolling the
+ * whole panel carried the compose row off the top, so writing a note on a pull
+ * with a page of them meant scrolling up to type and back down to read.
+ *
+ * Same shape as the stream sidebar: fixed chrome, one section that takes the
+ * slack. Preferred over making the compose row sticky, which would leave it
+ * floating over the notes it is meant to sit above.
+ */
 .notes-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   border-left: 1px solid var(--border);
   background: var(--surface);
+}
+
+.notes-header,
+.note-compose {
+  flex: none;
 }
 
 .notes-header {
@@ -1199,6 +1213,9 @@ button.primary {
 }
 
 .note-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   list-style: none;
   margin: 0;
   padding: 4px 0;
