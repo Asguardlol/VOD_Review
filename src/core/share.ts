@@ -2,7 +2,7 @@ import {
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
 } from 'lz-string'
-import type { VodSession } from './types'
+import type { VodGuild, VodSession, VodStream } from './types'
 import { newId } from './ids'
 import { normalizeSession } from './normalize'
 
@@ -120,6 +120,65 @@ export function adoptSharedSession(
     publicId: undefined,
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+/**
+ * Just the roster: who is in this session and which guilds they belong to.
+ *
+ * Separate from the session export because it answers a different question —
+ * "here are my raiders" rather than "here is this night" — and it is the thing
+ * worth moving between sessions.
+ *
+ * The guilds travel with it, and only the ones actually referenced. A stream
+ * carries a `guildId`, and pasting one into a session that has never heard of
+ * that guild puts it in a group that does not exist: the sidebar lists members
+ * per known guild and the ungrouped separately, so such a stream renders in
+ * neither and silently disappears while still being in the data.
+ */
+interface RosterPayload {
+  v: 2
+  streams: VodStream[]
+  guilds: VodGuild[]
+}
+
+export function exportRosterJson(session: VodSession): string {
+  const used = new Set(session.streams.map((s) => s.guildId).filter(Boolean))
+  const payload: RosterPayload = {
+    v: 2,
+    // Resolved VODs are specific to one report and one viewer's Twitch token.
+    streams: session.streams.map((s) => ({
+      ...s,
+      resolved: undefined,
+      unavailableReason: undefined,
+    })),
+    guilds: session.guilds.filter((g) => used.has(g.id)),
+  }
+  return JSON.stringify(payload, null, 2)
+}
+
+/**
+ * Reads a pasted roster.
+ *
+ * Accepts a full session export too, since that is the other thing someone
+ * plausibly has on their clipboard and it contains everything needed.
+ */
+export function importRosterJson(
+  text: string,
+): { streams: VodStream[]; guilds: VodGuild[] } | undefined {
+  try {
+    const parsed = JSON.parse(text) as Partial<RosterPayload> & {
+      session?: VodSession
+    }
+    const source = parsed.session ?? parsed
+    if (!Array.isArray(source.streams)) return undefined
+    const normalized = normalizeSession({
+      ...(source as VodSession),
+      guilds: source.guilds ?? [],
+    })
+    return { streams: normalized.streams, guilds: normalized.guilds }
+  } catch {
+    return undefined
   }
 }
 

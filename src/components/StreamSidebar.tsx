@@ -25,8 +25,10 @@ interface Props {
   onAddGuild(): void
   onRenameGuild(guild: VodGuild): void
   onRemoveGuild(guildId: string): void
-  onImport(file: File): void
-  onExport(): void
+  /** Opens the paste box. The parent owns what pasted text means. */
+  onImport(): void
+  /** The roster as JSON, for the clipboard. */
+  rosterJson(): string
 }
 
 export interface StreamDraft {
@@ -104,8 +106,9 @@ export function StreamSidebar({
   onRenameGuild,
   onRemoveGuild,
   onImport,
-  onExport,
+  rosterJson,
 }: Props) {
+  const [copied, setCopied] = useState(false)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<VodStream | undefined>()
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -117,6 +120,22 @@ export function StreamSidebar({
 
   const atCapacity = watching.length >= maxWatching
   const ungrouped = streams.filter((s) => !s.guildId)
+
+  /**
+   * The tick is the only signal the copy happened — this replaced a file
+   * download, which announced itself. If the browser refuses the write the JSON
+   * goes in a prompt, so the roster is still recoverable by hand.
+   */
+  const copyRoster = () => {
+    const json = rosterJson()
+    void navigator.clipboard.writeText(json).then(
+      () => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      },
+      () => window.prompt('Copy this roster', json),
+    )
+  }
 
   const toggleExpanded = (guildId: string) =>
     setExpanded((current) => {
@@ -349,20 +368,9 @@ export function StreamSidebar({
             + New stream
           </button>
           <button onClick={onAddGuild}>+ Guild</button>
-          <label className="import-button">
-            Import
-            <input
-              type="file"
-              accept="application/json,.json"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) onImport(file)
-                e.target.value = ''
-              }}
-            />
-          </label>
-          <button onClick={onExport} disabled={streams.length === 0}>
-            Export
+          <button onClick={onImport}>Paste roster</button>
+          <button onClick={copyRoster} disabled={streams.length === 0}>
+            {copied ? 'Copied ✓' : 'Copy roster'}
           </button>
         </div>
       )}

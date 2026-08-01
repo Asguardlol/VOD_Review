@@ -5,7 +5,12 @@ import { useSession } from '../hooks/useSession'
 import { useTimeline } from '../hooks/useTimeline'
 import { newId } from '../core/ids'
 import { timelineOffsetMs, vodForStream, coversPull } from '../core/sync'
-import { buildShareUrl, exportSessionJson, importSessionJson } from '../core/share'
+import {
+  buildShareUrl,
+  exportRosterJson,
+  exportSessionJson,
+  importRosterJson,
+} from '../core/share'
 import { confidentReportCode, createWclClient, parseReportCode } from '../wcl/config'
 import { parseChannelLogin } from '../twitch/helix'
 import { TwitchAuthError } from '../twitch/client'
@@ -23,6 +28,7 @@ import { TransportBar } from './TransportBar'
 import { MenuButton } from './MenuButton'
 import { NotesPanel } from './NotesPanel'
 import { ShareDialog } from './ShareDialog'
+import { PasteDialog } from './PasteDialog'
 import { WclConnectPanel } from './WclConnectPanel'
 
 interface Props {
@@ -54,6 +60,9 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
   const [twitchConnected, setTwitchConnected] = useState(() => !!getStoredToken())
   /** Set while the share dialog is open; holds the link it is showing. */
   const [shareUrl, setShareUrl] = useState<string | undefined>()
+  /** Whether the paste-a-roster box is open, and what it last complained about. */
+  const [pasting, setPasting] = useState(false)
+  const [pasteError, setPasteError] = useState<string | undefined>()
   /** Whether the notes panel is open. Per-session, not persisted. */
   const [notesOpen, setNotesOpen] = useState(false)
   /**
@@ -605,16 +614,10 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
             onAdd={(draft) => void addStream(draft)}
             onEdit={editStream}
             onRemove={removeStream}
-            onExport={downloadJson}
-            onImport={(file) => {
-              void file.text().then((text) => {
-                const imported = importSessionJson(text)
-                if (!imported) {
-                  setError('That file is not a session export this version understands.')
-                  return
-                }
-                update((s) => ({ ...s, streams: imported.streams }))
-              })
+            rosterJson={() => exportRosterJson(session)}
+            onImport={() => {
+              setPasteError(undefined)
+              setPasting(true)
             }}
           />
 
@@ -798,6 +801,35 @@ export function SessionView({ store, sessionId, fromShare, onSwitchSession }: Pr
           url={shareUrl}
           onDownloadJson={downloadJson}
           onClose={() => setShareUrl(undefined)}
+        />
+      )}
+
+      {pasting && (
+        <PasteDialog
+          title="Paste roster"
+          confirmLabel="Replace roster"
+          note="Replaces the stream list in this session. Guilds named in the paste are added if you do not already have them; the report and your notes are untouched."
+          error={pasteError}
+          onConfirm={(text) => {
+            const imported = importRosterJson(text)
+            if (!imported) {
+              setPasteError('That is not a roster this version can read.')
+              return
+            }
+            update((s) => {
+              // Merge guilds by id rather than replacing: a paste that brings a
+              // guild you already have must not duplicate it, and one that
+              // brings a new guild must not leave its members homeless.
+              const known = new Set(s.guilds.map((g) => g.id))
+              return {
+                ...s,
+                streams: imported.streams,
+                guilds: [...s.guilds, ...imported.guilds.filter((g) => !known.has(g.id))],
+              }
+            })
+            setPasting(false)
+          }}
+          onClose={() => setPasting(false)}
         />
       )}
     </div>
